@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react"
-import { getMyProfile, insertText } from "../../logic/content-logic"
+import { getMyProfile, insertText, getPartnerProfile } from "../../logic/content-logic"
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
+import { getUserIdFromUrl } from "../../utils/url"
 
 interface GenerateButtonProps {
     textarea: HTMLTextAreaElement
@@ -39,9 +40,33 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             // 2. Get Target Profile
             let targetProfileText = ""
             const cachedTarget = sessionStorage.getItem("luna_last_viewed_user")
+
+            // Current User ID from URL
+            const currentUserId = getUserIdFromUrl(location.href)
+
             if (cachedTarget) {
                 const data = JSON.parse(cachedTarget)
-                targetProfileText = extractProfileFromJSON(data)
+
+                // Validate ID matches
+                const targetData = data.user || data.profile || data
+                const cachedId = targetData.id || targetData.user_id
+
+                if (currentUserId && cachedId && String(cachedId) !== String(currentUserId)) {
+                    await addLog("warn", "Cached profile ID mismatch", { cachedId, currentUserId }, "CONTENT")
+                    targetProfileText = "" // invalidate
+                } else {
+                    targetProfileText = extractProfileFromJSON(data)
+                }
+            }
+
+            // Fallback: Fetch if missing or invalid
+            if ((!targetProfileText || targetProfileText.length < 10) && currentUserId) {
+                await addLog("info", "Attempting fallback fetch for partner profile", { currentUserId }, "CONTENT")
+                const isService = location.href.includes("/service/")
+                const fetchedText = await getPartnerProfile(currentUserId, isService)
+                if (fetchedText) {
+                    targetProfileText = fetchedText
+                }
             }
 
             if (!targetProfileText || targetProfileText.length < 10) {

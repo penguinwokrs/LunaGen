@@ -42,3 +42,4 @@ export function extractProfileFromJSON(u: any): string {
 
     return text.trim() || JSON.stringify(u, null, 2)
 }
+

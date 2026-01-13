@@ -5,20 +5,28 @@ import { createRoot } from "react-dom/client"
 import { GenerateButton } from "./components/Content/GenerateButton"
 import { addLog } from "./utils/logger"
 import { extractProfileFromJSON } from "./utils/profile"
+import { getUserIdFromUrl } from "./utils/url"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://*.luna-matching.com/*", "https://luna-matching.com/*"]
 }
 
 const storage = new Storage({ area: "local" })
-let lastTargetAge: number | string | null = null
+let lastTargetUser: { id: string; age: number | string } | null = null
 let lastUrl = location.href
+
+
 
 /**
  * 年齢表示を更新するDOM操作
  */
 function updateAgeInDOM() {
-  if (!lastTargetAge) return
+  if (!lastTargetUser) return
+
+  const currentUserId = getUserIdFromUrl(location.pathname)
+  if (currentUserId && lastTargetUser.id !== currentUserId) {
+    return
+  }
 
   try {
     const xpath = "/html/body/div[1]/div/div/main/div/div/div[2]/div/div[2]/div[1]/small/div/span[2]"
@@ -26,7 +34,7 @@ function updateAgeInDOM() {
     const element = result.singleNodeValue as HTMLElement
 
     if (element) {
-      const newText = `${lastTargetAge}歳`
+      const newText = `${lastTargetUser.age}歳`
       if (element.innerText !== newText) {
         element.innerText = newText
         addLog("info", `DOM Age Updated: ${newText}`, null, "CONTENT")
@@ -71,8 +79,13 @@ window.addEventListener("message", async (event) => {
   if (url.includes("/api/user/show/") || url.includes("/api/user/service/show/")) {
     sessionStorage.setItem("luna_last_viewed_user", JSON.stringify(data))
     const targetData = data.user || data.profile || data
-    if (targetData?.age) {
-      lastTargetAge = targetData.age
+
+    const requestId = getUserIdFromUrl(url)
+    const dataId = targetData.id || targetData.user_id
+    const id = requestId || (dataId ? String(dataId) : null)
+
+    if (targetData?.age && id) {
+      lastTargetUser = { id, age: targetData.age }
       updateAgeInDOM()
     }
   }
@@ -85,9 +98,6 @@ function initObserver() {
   const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href
-      lastTargetAge = null
-      // ユーザーが別のページに移動したらキャッシュされたプロフィールを消去する
-      sessionStorage.removeItem("luna_last_viewed_user")
     }
 
     updateAgeInDOM()

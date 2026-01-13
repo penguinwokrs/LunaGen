@@ -46,3 +46,30 @@ export async function getMyProfile() {
         return "自分のプロフィールの取得に失敗しました。設定画面でプロフィールを更新するか、ログインしてください。"
     }
 }
+
+/**
+ * 相手のプロフィールをIDで明示的に取得する
+ */
+export async function getPartnerProfile(userId: string, isService: boolean = false) {
+    try {
+        const endpoint = isService
+            ? `https://luna-matching.com/api/user/service/show/${userId}`
+            : `https://luna-matching.com/api/user/show/${userId}`
+
+        await addLog("info", `Fetching partner profile explicitly: ${endpoint}`, null, "CONTENT")
+
+        const res = await fetch(endpoint)
+        if (!res.ok) throw new Error("Fetch failed: " + res.status)
+
+        const data = await res.json()
+
+        // Cache this for next time
+        sessionStorage.setItem("luna_last_viewed_user", JSON.stringify(data))
+
+        const targetData = data.user || data.profile || data
+        return extractProfileFromJSON(targetData)
+    } catch (e: any) {
+        await addLog("error", "Failed to fetch partner profile", { error: e.toString() }, "CONTENT")
+        return null
+    }
+}
