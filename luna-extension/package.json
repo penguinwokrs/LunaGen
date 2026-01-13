@@ -1,0 +1,45 @@
+{
+  "name": "luna-extension",
+  "displayName": "Luna extension",
+  "version": "0.0.1",
+  "description": "luna message generate",
+  "author": "PenguinWokrs",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@plasmohq/storage": "^1.15.0",
+    "openai": "^6.16.0",
+    "plasmo": "0.90.5",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "4.1.1",
+    "@testing-library/react": "^16.3.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/chrome": "0.0.258",
+    "@types/node": "20.11.5",
+    "@types/react": "18.2.48",
+    "@types/react-dom": "18.2.18",
+    "@vitejs/plugin-react": "^5.1.2",
+    "jsdom": "^27.4.0",
+    "prettier": "3.2.4",
+    "typescript": "5.3.3",
+    "vitest": "^4.0.17"
+  },
+  "manifest": {
+    "host_permissions": [
+      "https://*/*"
+    ],
+    "permissions": [
+      "storage",
+      "downloads",
+      "tabs",
+      "scripting"
+    ]
+  }
+}
