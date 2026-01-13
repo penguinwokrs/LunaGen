@@ -86,6 +86,8 @@ function initObserver() {
     if (location.href !== lastUrl) {
       lastUrl = location.href
       lastTargetAge = null
+      // ユーザーが別のページに移動したらキャッシュされたプロフィールを消去する
+      sessionStorage.removeItem("luna_last_viewed_user")
     }
 
     updateAgeInDOM()
