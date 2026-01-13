@@ -25,6 +25,9 @@ const DEFAULT_PROMPT = `あなたはマッチングサイトの人気ユーザ�
 {target_info_clean}`
 
 async function addLog(level: string, message: string, detail?: any) {
+  const isDebugEnabled = await storage.get<boolean>("isDebugEnabled") ?? (process.env.NODE_ENV === "development")
+  if (!isDebugEnabled) return
+
   const logs = await storage.get<any[]>("debugLogs") || []
   const newLog = {
     timestamp: new Date().toISOString(),
