@@ -9,7 +9,7 @@ export const config: PlasmoCSConfig = {
 
 console.log("[LUNA-BOOT] Content script is loading at", location.href)
 
-const storage = new Storage()
+const storage = new Storage({ area: "local" })
 let lastTargetAge: number | string | null = null
 let lastUrl = location.href
 let isDebugEnabledCache = true
@@ -42,9 +42,9 @@ async function addLog(level: string, message: string, detail?: any) {
       timestamp: new Date().toISOString(),
       level,
       message,
-      detail
+      detail: typeof detail === 'object' ? JSON.stringify(detail).substring(0, 1000) : detail
     }
-    const updatedLogs = [newLog, ...logs].slice(0, 500)
+    const updatedLogs = [newLog, ...logs].slice(0, 100)
     await storage.set("debugLogs", updatedLogs)
   } catch (e) {
     console.error("[LUNA-ERROR] Failed to add log", e)
@@ -184,11 +184,26 @@ function extractProfileFromJSON(u: any): string {
 
 const GenerateButton = ({ textarea }: { textarea: HTMLTextAreaElement }) => {
   const [loading, setLoading] = useState(false)
+  const [slow, setSlow] = useState(false)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (loading) {
+      setSlow(false)
+      setError(false)
+      timer = setTimeout(() => {
+        setSlow(true)
+      }, 5000)
+    }
+    return () => clearTimeout(timer)
+  }, [loading])
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setLoading(true)
+    setError(false)
 
     await addLog("info", "AI Generate Button Clicked")
 
@@ -199,7 +214,6 @@ const GenerateButton = ({ textarea }: { textarea: HTMLTextAreaElement }) => {
       await addLog("info", "My Profile Retrieved", { length: myProfileText?.length })
 
       // 2. Get Target Profile
-      // APIから取得したキャッシュがあればそれを使う、なければDOMから
       await addLog("info", "Retrieving Target Profile...")
       let targetProfileText = ""
       const cachedTarget = sessionStorage.getItem("luna_last_viewed_user")
@@ -219,48 +233,62 @@ const GenerateButton = ({ textarea }: { textarea: HTMLTextAreaElement }) => {
 
       // 3. Generate Message
       await addLog("info", "Sending message generation request to background...")
+
+      // プレミアムメッセージかどうかを判定（画面内に特定の文言があるか）
+      const isPremium = document.body.innerText.includes("プレミアムメッセージを送る")
+      await addLog("info", `Detected message type: ${isPremium ? "Premium" : "Normal"}`)
+
       const response = await chrome.runtime.sendMessage({
         action: "generate_message",
         myProfile: myProfileText,
-        targetProfile: targetProfileText
+        targetProfile: targetProfileText,
+        isPremium: isPremium
       })
 
       if (response.error) {
         await addLog("error", "AI Generation Error Response", { error: response.error })
-        alert("Error: " + response.error)
+        setError(true)
       } else if (response.text) {
         await addLog("info", "AI Generation Success", { textPreview: response.text.substring(0, 100) + "..." })
         insertText(textarea, response.text)
+        setError(false)
       }
     } catch (err: any) {
       await addLog("error", "AI Generation Exception", { error: err.toString() })
       console.error(err)
-      alert("AI生成中にエラーが発生しました。")
+      setError(true)
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      style={{
-        marginTop: "8px",
-        padding: "6px 12px",
-        backgroundColor: loading ? "#ccc" : "#e91e63",
-        color: "white",
-        border: "none",
-        borderRadius: "4px",
-        fontSize: "12px",
-        cursor: loading ? "not-allowed" : "pointer",
-        fontWeight: "bold",
-        boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-        zIndex: 9999
-      }}
-    >
-      {loading ? "AI生成中..." : "✨ AIでメッセージ生成"}
-    </button>
+    <div style={{ marginTop: "8px" }}>
+      <button
+        onClick={handleClick}
+        disabled={loading}
+        style={{
+          padding: "6px 12px",
+          backgroundColor: loading ? "#ccc" : (error ? "#f44336" : "#e91e63"),
+          color: "white",
+          border: "none",
+          borderRadius: "4px",
+          fontSize: "12px",
+          cursor: loading ? "not-allowed" : "pointer",
+          fontWeight: "bold",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+          zIndex: 9999,
+          transition: "all 0.3s ease"
+        }}
+      >
+        {loading ? (slow ? "⌛ 時間がかかっています、このままお待ち下さい..." : "🪄 AI生成中...") : (error ? "⚠️ エラーが発生しました、もう一度お試しください" : "✨ AIでメッセージ生成")}
+      </button>
+      {error && !loading && (
+        <p style={{ color: "#f44336", fontSize: "10px", margin: "4px 0 0 4px", fontWeight: "bold" }}>
+          通信エラーが発生した可能性があります。
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -300,19 +328,12 @@ async function getMyProfile() {
 
 
 function insertText(textarea: HTMLTextAreaElement, text: string) {
-  const originalValue = textarea.value
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
-  const newValue = originalValue.substring(0, start) + text + originalValue.substring(end)
-  textarea.value = newValue
+  textarea.value = text
 
   // React/Vue state update trigger
   textarea.dispatchEvent(new Event("input", { bubbles: true }))
   textarea.dispatchEvent(new Event("change", { bubbles: true }))
 
-  // Move cursor
-  textarea.selectionStart = textarea.selectionEnd = start + text.length
   textarea.focus()
 }
 

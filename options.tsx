@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
 const DEFAULT_PROMPT = `あなたはマッチングサイトの人気ユーザーです。
@@ -45,22 +46,25 @@ const OPENAI_MODELS = [
   "gpt-3.5-turbo",
 ]
 
+const storage = new Storage({ area: "local" })
+
 export default function Options() {
-  const [aiProvider, setAiProvider] = useStorage("aiProvider", "gemini")
+  const [aiProvider, setAiProvider] = useStorage({ key: "aiProvider", instance: storage }, "gemini")
 
-  const [geminiApiKey, setGeminiApiKey] = useStorage("geminiApiKey", "")
-  const [geminiModel, setGeminiModel] = useStorage("geminiModel", "gemini-1.5-flash")
+  const [geminiApiKey, setGeminiApiKey] = useStorage({ key: "geminiApiKey", instance: storage }, "")
+  const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-1.5-flash")
 
-  const [openaiApiKey, setOpenaiApiKey] = useStorage("openaiApiKey", "")
-  const [openaiModel, setOpenaiModel] = useStorage("openaiModel", "gpt-4o")
+  const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: storage }, "")
+  const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
 
-  const [promptTemplate, setPromptTemplate] = useStorage("promptTemplate", DEFAULT_PROMPT)
+  const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
+
 
   // New storage for My Profile
-  const [myProfile, setMyProfile] = useStorage("myProfile", "")
-  const [myProfileUpdatedAt, setMyProfileUpdatedAt] = useStorage("myProfileUpdatedAt", "")
-  const [isDebugEnabled, setIsDebugEnabled] = useStorage("isDebugEnabled", true)
-  const [debugLogs, setDebugLogs] = useStorage<any[]>("debugLogs", [])
+  const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")
+  const [myProfileUpdatedAt, setMyProfileUpdatedAt] = useStorage({ key: "myProfileUpdatedAt", instance: storage }, "")
+  const [isDebugEnabled, setIsDebugEnabled] = useStorage({ key: "isDebugEnabled", instance: storage }, true)
+  const [debugLogs, setDebugLogs] = useStorage<any[]>({ key: "debugLogs", instance: storage }, [])
 
   const [status, setStatus] = useState<{ message: string, type: "success" | "error" } | null>(null)
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
@@ -77,9 +81,9 @@ export default function Options() {
       timestamp: new Date().toISOString(),
       level,
       message,
-      detail
+      detail: typeof detail === 'object' ? JSON.stringify(detail).substring(0, 1000) : detail
     }
-    setDebugLogs((prev) => [newLog, ...(prev || [])].slice(0, 500))
+    setDebugLogs((prev) => [newLog, ...(prev || [])].slice(0, 100))
   }
 
   const fetchMyProfile = async () => {
@@ -245,7 +249,7 @@ export default function Options() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #e91e63", marginBottom: "20px" }}>
         <h1 style={{ paddingBottom: "10px", color: "#e91e63", margin: 0 }}>
-          Luna Extension 設定
+          LunaGen 設定
         </h1>
         <a href="#debug-logs" style={{ fontSize: "0.9rem", color: "#666", textDecoration: "none", border: "1px solid #ccc", padding: "4px 8px", borderRadius: "4px" }}>
           🔍 ログを確認

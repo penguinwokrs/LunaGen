@@ -1,9 +1,9 @@
 {
-  "name": "luna-extension",
-  "displayName": "Luna extension",
-  "version": "0.0.1",
-  "description": "luna message generate",
-  "author": "PenguinWokrs",
+  "name": "lunagen",
+  "displayName": "LunaGen",
+  "version": "1.0.0",
+  "description": "AI-powered message generator for Luna",
+  "author": "PenguinWokrs <dev.and.penguin@gmail.com>",
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",

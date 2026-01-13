@@ -1,6 +1,28 @@
 import { Storage } from "@plasmohq/storage"
 
-const storage = new Storage()
+const storage = new Storage({ area: "local" })
+
+const DEFAULT_PROMPT = `あなたはマッチングサイトの人気ユーザーです。
+以下の「自分のプロフィール」と「相手のプロフィール」を元に、相手が「この人は私のことを分かってくれている」「話してみたい」と感じ、思わず「いいね」や返信をしたくなるような魅力的な初回メッセージを作成してください。
+
+# 成功のポイント（思わず返信したくなる要素）
+1. **「あなただけ」という特別感**: プロフィールの具体的な記述（具体的な趣味、性格、独特な価値観など）を引用し、「まさにそこに惹かれました」と伝える。
+2. **感情の共有**: 共通点に対して事実だけでなく、「それが好きなんて最高ですね！」「気が合いそうで嬉しいです」といったポジティブな感情を添える。
+3. **安心感と包容力**: 誠実さを伝えつつ、相手の嗜好（M気質や躾けられたい願望など）を「受け止められる」「叶えられる」という頼りがいやS気質をさりげなく匂わせる。
+4. **返信のしやすさ**: 相手がパッと答えられる、または語りたくなるような楽しい質問で締めくくる。
+
+# 制約事項
+- 最初の文章は必ず「[相手の名前]さん、はじめまして！」のように、相手の名前と挨拶から始めること。
+- 文字数は、句読点、記号、カッコ、空白、改行などすべてを含めて合計200文字以内（厳守）。
+- 丁寧だが、堅苦しすぎない親しみやすいトーン（絵文字や！を適度に使って明るく）。
+- テンプレート感を出さない。自分の言葉で語りかけるように。
+- メッセージ本文のみを出力すること。
+
+# 自分のプロフィール
+{my_info_clean}
+
+# 相手のプロフィール
+{target_info_clean}`
 
 async function addLog(level: string, message: string, detail?: any) {
   const logs = await storage.get<any[]>("debugLogs") || []
@@ -8,11 +30,11 @@ async function addLog(level: string, message: string, detail?: any) {
     timestamp: new Date().toISOString(),
     level,
     message,
-    detail
+    detail: typeof detail === 'object' ? JSON.stringify(detail).substring(0, 1000) : detail
   }
-  const updatedLogs = [newLog, ...logs].slice(0, 500)
+  const updatedLogs = [newLog, ...logs].slice(0, 100)
   await storage.set("debugLogs", updatedLogs)
-  console.log(`[LUNA-BG-${level.toUpperCase()}] ${message}`, detail || "")
+  console.log(`[LUNA - BG - ${level.toUpperCase()}] ${message} `, detail || "")
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -86,13 +108,15 @@ async function handleTestApi({ provider, apiKey, model }) {
 }
 
 
-async function handleGenerateMessage({ myProfile, targetProfile }) {
+async function handleGenerateMessage({ myProfile, targetProfile, isPremium }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
-  const promptTemplate = await storage.get("promptTemplate")
+  const promptTemplateFromStorage = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
 
-  if (!promptTemplate) {
-    await addLog("error", "Prompt template is missing")
-    throw new Error("Prompt template is missing")
+  let promptTemplate = promptTemplateFromStorage
+  if (isPremium) {
+    // プレミアムメッセージの場合は文字数制限を500文字に拡張
+    promptTemplate = promptTemplate.replace("200文字以内", "500文字以内")
+    await addLog("info", "Premium message detected: Limit expanded to 500 characters")
   }
 
   const prompt = promptTemplate
@@ -102,7 +126,8 @@ async function handleGenerateMessage({ myProfile, targetProfile }) {
   await addLog("info", `Using AI Provider: ${aiProvider}`, {
     myProfileLength: myProfile?.length,
     targetProfileLength: targetProfile?.length,
-    promptPreview: prompt.substring(0, 200) + "..."
+    promptPreview: prompt.substring(0, 200) + "...",
+    isPremium
   })
 
   if (aiProvider === "gemini") {

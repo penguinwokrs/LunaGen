@@ -8,11 +8,11 @@ function IndexPopup() {
         minWidth: 250,
         fontFamily: "sans-serif"
       }}>
-      <h2 style={{ margin: "0 0 10px 0", color: "#e91e63" }}>Luna Extension</h2>
+      <h2 style={{ margin: "0 0 10px 0", color: "#e91e63" }}>LunaGen</h2>
       <p style={{ fontSize: "0.9rem", color: "#666" }}>
         メッセージ自動生成拡張機能です。
       </p>
-      
+
       <button
         onClick={() => chrome.runtime.openOptionsPage()}
         style={{
