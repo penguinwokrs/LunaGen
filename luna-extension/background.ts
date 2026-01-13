@@ -30,78 +30,101 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true
   }
 
-  if (request.action === "capture_profile_screenshot") {
-    addLog("info", "Capturing profile screenshot...")
-    handleCaptureScreenshot()
-      .then(() => {
-        addLog("info", "Screenshot captured and download triggered")
-        sendResponse({ success: true })
-      })
-      .catch((err) => {
-        addLog("error", "Failed to capture screenshot", { error: err.message })
-        sendResponse({ error: err.message })
-      })
+
+  if (request.action === "test_api") {
+    handleTestApi(request)
+      .then((res) => sendResponse(res))
+      .catch((err) => sendResponse({ error: err.message }))
     return true
   }
 })
 
-async function handleCaptureScreenshot() {
-  const url = "https://luna-matching.com/profile"
-
-  // 1. 新しいタブでプロフィールを開く
-  const tab = await chrome.tabs.create({ url, active: true })
-
-  // 2. 読み込み完了を待つ
-  return new Promise((resolve, reject) => {
-    const listener = (tabId, info) => {
-      if (tabId === tab.id && info.status === "complete") {
-        chrome.tabs.onUpdated.removeListener(listener)
-
-        // 少し待機（SPAのレンダリング待ち）
-        setTimeout(async () => {
-          try {
-            // 3. スクリーンショット撮影
-            const dataUrl = await chrome.tabs.captureVisibleTab()
-
-            // 4. ダウンロード
-            chrome.downloads.download({
-              url: dataUrl,
-              filename: `luna_profile_debug_${Date.now()}.png`,
-              saveAs: false
-            })
-
-            resolve(true)
-          } catch (e) {
-            reject(e)
-          }
-        }, 3000)
+async function handleTestApi({ provider, apiKey, model }) {
+  const testPrompt = "hello, world!!"
+  try {
+    if (provider === "gemini") {
+      // Use helper but override apiKey/model for testing
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: testPrompt }] }]
+        })
+      })
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error?.message || "Gemini API Error")
       }
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ""
+      return { success: true, text }
+    } else {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{ role: "user", content: testPrompt }],
+          max_tokens: 10
+        })
+      })
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error?.message || "OpenAI API Error")
+      }
+      const data = await response.json()
+      const text = data.choices?.[0]?.message?.content || ""
+      return { success: true, text }
     }
-    chrome.tabs.onUpdated.addListener(listener)
-  })
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
 }
+
 
 async function handleGenerateMessage({ myProfile, targetProfile }) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
   const promptTemplate = await storage.get("promptTemplate")
 
+  if (!promptTemplate) {
+    await addLog("error", "Prompt template is missing")
+    throw new Error("Prompt template is missing")
+  }
+
   const prompt = promptTemplate
     .replace("{my_info_clean}", myProfile)
     .replace("{target_info_clean}", targetProfile)
 
+  await addLog("info", `Using AI Provider: ${aiProvider}`, {
+    myProfileLength: myProfile?.length,
+    targetProfileLength: targetProfile?.length,
+    promptPreview: prompt.substring(0, 200) + "..."
+  })
+
   if (aiProvider === "gemini") {
     const model = await storage.get("geminiModel") || "gemini-1.5-flash"
+    await addLog("info", `Gemini Model: ${model}`)
     return await generateWithGemini(prompt, model)
   } else {
     const model = await storage.get("openaiModel") || "gpt-4o"
+    await addLog("info", `OpenAI Model: ${model}`)
     return await generateWithOpenAI(prompt, model)
   }
 }
 
 async function generateWithGemini(prompt: string, model: string) {
   const apiKey = await storage.get("geminiApiKey")
-  if (!apiKey) throw new Error("Gemini API Key is not set")
+  if (!apiKey) {
+    await addLog("error", "Gemini API Key is not set")
+    throw new Error("Gemini API Key is not set")
+  }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+  await addLog("info", "Requesting Gemini API...")
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -117,15 +140,23 @@ async function generateWithGemini(prompt: string, model: string) {
   })
   if (!response.ok) {
     const err = await response.json()
+    await addLog("error", "Gemini API Error Response", err)
     throw new Error(err.error?.message || "Gemini API Error")
   }
   const data = await response.json()
-  return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || "" }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ""
+  await addLog("info", "Gemini API Response Received", { textLength: text.length })
+  return { text }
 }
 
 async function generateWithOpenAI(prompt: string, model: string) {
   const apiKey = await storage.get("openaiApiKey")
-  if (!apiKey) throw new Error("OpenAI API Key is not set")
+  if (!apiKey) {
+    await addLog("error", "OpenAI API Key is not set")
+    throw new Error("OpenAI API Key is not set")
+  }
+
+  await addLog("info", "Requesting OpenAI API...")
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -143,8 +174,11 @@ async function generateWithOpenAI(prompt: string, model: string) {
   })
   if (!response.ok) {
     const err = await response.json()
+    await addLog("error", "OpenAI API Error Response", err)
     throw new Error(err.error?.message || "OpenAI API Error")
   }
   const data = await response.json()
-  return { text: data.choices?.[0]?.message?.content || "" }
+  const text = data.choices?.[0]?.message?.content || ""
+  await addLog("info", "OpenAI API Response Received", { textLength: text.length })
+  return { text }
 }

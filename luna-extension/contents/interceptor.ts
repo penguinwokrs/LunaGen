@@ -1,9 +1,11 @@
 import type { PlasmoCSConfig } from "plasmo"
 
 export const config: PlasmoCSConfig = {
-  matches: ["https://luna-matching.com/*"],
+  matches: ["https://*.luna-matching.com/*", "https://luna-matching.com/*"],
   world: "MAIN"
 }
+
+console.log("[LUNA-BOOT] API Interceptor script is loading in MAIN world")
 
 // XHRのフック
 const originalXHR = window.XMLHttpRequest
@@ -28,7 +30,7 @@ window.XMLHttpRequest = function () {
     this.addEventListener("load", function () {
       // @ts-ignore
       const url = this._url
-      if (url && (url.includes("/api/user/show/") || url.includes("/api/user/profile") || url.includes("/api/user/get/me"))) {
+      if (url && (url.includes("/api/user/show/") || url.includes("/api/user/service/show/") || url.includes("/api/user/profile") || url.includes("/api/user/get/me"))) {
         try {
           const responseData = JSON.parse(this.responseText)
           window.postMessage({
@@ -61,7 +63,7 @@ window.fetch = async (...args) => {
   const response = await originalFetch(...args)
   const clone = response.clone()
 
-  if (url.includes("/api/user/show/") || url.includes("/api/user/auth") || url.includes("/api/user/get/me") || url.includes("/api/user/profile")) {
+  if (url.includes("/api/user/show/") || url.includes("/api/user/service/show/") || url.includes("/api/user/auth") || url.includes("/api/user/get/me") || url.includes("/api/user/profile")) {
     try {
       const buffer = await clone.arrayBuffer()
       const decoder = new TextDecoder("utf-8")
