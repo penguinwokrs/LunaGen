@@ -210,8 +210,10 @@ const GenerateButton = ({ textarea }: { textarea: HTMLTextAreaElement }) => {
       }
 
       if (!targetProfileText || targetProfileText.length < 10) {
-        await addLog("info", "Scraping Target Profile from DOM")
-        targetProfileText = getTargetProfile()
+        await addLog("error", "Target Profile not found in API cache")
+        alert("相手のプロフィール情報（APIデータ）の取得に失敗しました。ページを一度リロードしてから再度お試しください。")
+        setLoading(false)
+        return
       }
       await addLog("info", "Target Profile Retrieved", { length: targetProfileText?.length })
 
@@ -296,20 +298,6 @@ async function getMyProfile() {
   }
 }
 
-// Helper to scrape Target Profile (Current Page)
-function getTargetProfile() {
-  const main = document.querySelector("main")
-  if (main) return cleanText(main.innerText)
-  return cleanText(document.body.innerText)
-}
-
-function cleanText(text: string) {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .join("\n")
-}
 
 function insertText(textarea: HTMLTextAreaElement, text: string) {
   const originalValue = textarea.value
@@ -339,17 +327,22 @@ function initObserver() {
     // 年齢の更新を試みる
     updateAgeInDOM()
 
-    const textareas = document.querySelectorAll("textarea")
-    textareas.forEach((textarea) => {
-      if (textarea.dataset.lunaAiInjected === "true") return
-      textarea.dataset.lunaAiInjected = "true"
+    // 相手のプロフィールページ（/user/show/ または /user/service/show/）である場合のみボタンを挿入
+    const isTargetProfilePage = location.pathname.includes("/user/show/") || location.pathname.includes("/user/service/show/")
 
-      const container = document.createElement("div")
-      textarea.parentElement?.appendChild(container)
+    if (isTargetProfilePage) {
+      const textareas = document.querySelectorAll("textarea")
+      textareas.forEach((textarea) => {
+        if (textarea.dataset.lunaAiInjected === "true") return
+        textarea.dataset.lunaAiInjected = "true"
 
-      const root = createRoot(container)
-      root.render(<GenerateButton textarea={textarea} />)
-    })
+        const container = document.createElement("div")
+        textarea.parentElement?.appendChild(container)
+
+        const root = createRoot(container)
+        root.render(<GenerateButton textarea={textarea} />)
+      })
+    }
   })
 
   observer.observe(document.body, { childList: true, subtree: true })
