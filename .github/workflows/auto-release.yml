@@ -27,27 +27,47 @@ jobs:
           node-version: 20
           cache: "pnpm"
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build the extension
-        run: pnpm build
-
-      - name: Package the extension
-        run: pnpm package
-
-      - name: Bubble bump version and push tag
+      - name: Calculate next version
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
+          dry_run: true
+
+      - name: Update package.json version
+        run: |
+          npm version ${{ steps.tag_version.outputs.new_version }} --no-git-tag-version
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build and Package
+        # Build with the new version in package.json
+        run: |
+          pnpm build
+          pnpm package
+
+      - name: Commit and Push Version Bump
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json
+          git commit -m "chore(release): bump version to ${{ steps.tag_version.outputs.new_version }} [skip ci]"
+          git push
+
+      - name: Create Tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: ${{ steps.tag_version.outputs.new_version }}
+          tag_prefix: "v"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag_version.outputs.new_tag }}
-          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          tag_name: v${{ steps.tag_version.outputs.new_version }}
+          name: Release v${{ steps.tag_version.outputs.new_version }}
           body: ${{ steps.tag_version.outputs.changelog }}
           generate_release_notes: true
           files: |
