@@ -2,6 +2,8 @@ import { Storage } from "@plasmohq/storage"
 import { DEFAULT_PROMPT } from "./constants"
 import { addLog } from "./utils/logger"
 
+import replacementRules from "./assets/replacement_rules.json"
+
 const storage = new Storage({ area: "local" })
 
 const logBG = (level: string, message: string, detail?: any) => addLog(level, message, detail, "BG")
@@ -75,6 +77,13 @@ async function handleGenerateMessage({ myProfile, targetProfile, isPremium }: an
   const promptTemplateFromStorage = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
 
   let promptTemplate = promptTemplateFromStorage
+
+  // Sanitize prompt to avoid Safety/Prohibited Content errors
+  replacementRules.forEach(rule => {
+    // Use global replacement to catch all instances
+    promptTemplate = promptTemplate.split(rule.from).join(rule.to)
+  })
+
   if (isPremium) {
     promptTemplate = promptTemplate.replace("200文字以内", "500文字以内")
     await logBG("info", "Premium message: Limit expanded to 500 characters")
@@ -118,7 +127,28 @@ async function generateWithGemini(prompt: string, model: string) {
     throw new Error(err.error?.message || "Gemini API Error")
   }
   const data = await response.json()
-  return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || "" }
+  const candidate = data.candidates?.[0]
+  const text = candidate?.content?.parts?.[0]?.text
+
+  if (!text) {
+    await logBG("error", "Gemini Raw Response for Empty Text", { data })
+
+    let details = "UNKNOWN_ERROR"
+    if (candidate?.finishReason) {
+      details = `FinishReason: ${candidate.finishReason}`
+    } else if (data.promptFeedback) {
+      const blockReason = data.promptFeedback.blockReason
+      if (blockReason) {
+        details = `PromptBlocked: ${blockReason}`
+      } else {
+        details = `PromptFeedback: ${JSON.stringify(data.promptFeedback)}`
+      }
+    }
+
+    throw new Error(`Gemini generated no text. (${details})`)
+  }
+
+  return { text }
 }
 
 async function generateWithOpenAI(prompt: string, model: string) {

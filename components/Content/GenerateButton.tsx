@@ -87,13 +87,16 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 isPremium: isPremium
             })
 
-            if (response.error) {
+            if (response && response.error) {
                 await addLog("error", "AI Generation Error Response", { error: response.error }, "CONTENT")
                 setError(true)
-            } else if (response.text) {
+            } else if (response && response.text) {
                 await addLog("info", "AI Generation Success", null, "CONTENT")
                 insertText(textarea, response.text)
                 setError(false)
+            } else {
+                await addLog("error", "AI Generation Invalid Response", { response }, "CONTENT")
+                setError(true)
             }
         } catch (err: any) {
             await addLog("error", "AI Generation Exception", { error: err.toString() }, "CONTENT")
