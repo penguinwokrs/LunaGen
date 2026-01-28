@@ -11,12 +11,13 @@ import { DEFAULT_PROMPT } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
 
 const storage = new Storage({ area: "local" })
+const syncStorage = new Storage({ area: "sync" })
 
 export default function Options() {
   const [aiProvider, setAiProvider] = useStorage({ key: "aiProvider", instance: storage }, "gemini")
-  const [geminiApiKey, setGeminiApiKey] = useStorage({ key: "geminiApiKey", instance: storage }, "")
+  const [geminiApiKey, setGeminiApiKey] = useStorage({ key: "geminiApiKey", instance: syncStorage }, "")
   const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-1.5-flash")
-  const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: storage }, "")
+  const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: syncStorage }, "")
   const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
   const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
   const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")

@@ -5,6 +5,7 @@ import { addLog } from "./utils/logger"
 import replacementRules from "./assets/replacement_rules.json"
 
 const storage = new Storage({ area: "local" })
+const syncStorage = new Storage({ area: "sync" })
 
 const logBG = (level: string, message: string, detail?: any) => addLog(level, message, detail, "BG")
 
@@ -105,7 +106,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, isPremium }: an
 }
 
 async function generateWithGemini(prompt: string, model: string) {
-  const apiKey = await storage.get("geminiApiKey")
+  const apiKey = await syncStorage.get("geminiApiKey")
   if (!apiKey) throw new Error("Gemini API Key is not set")
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -152,7 +153,7 @@ async function generateWithGemini(prompt: string, model: string) {
 }
 
 async function generateWithOpenAI(prompt: string, model: string) {
-  const apiKey = await storage.get("openaiApiKey")
+  const apiKey = await syncStorage.get("openaiApiKey")
   if (!apiKey) throw new Error("OpenAI API Key is not set")
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
