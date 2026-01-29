@@ -1,8 +1,8 @@
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT } from "./constants"
 import { addLog } from "./utils/logger"
 
-import replacementRules from "./assets/replacement_rules.json"
+import { replacementRules } from "./assets/replacement_rules"
 
 const storage = new Storage({ area: "local" })
 const syncStorage = new Storage({ area: "sync" })
@@ -25,15 +25,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "test_api") {
+    logBG("info", `Testing API: ${request.provider}`)
     handleTestApi(request)
-      .then((res) => sendResponse(res))
-      .catch((err) => sendResponse({ error: err.message }))
+      .then((res) => {
+        logBG("info", "Test API Success", res)
+        sendResponse(res)
+      })
+      .catch((err) => {
+        logBG("error", "Test API Failed", { error: err.message })
+        sendResponse({ error: err.message })
+      })
     return true
   }
 })
 
 async function handleTestApi({ provider, apiKey, model }: any) {
   const testPrompt = "hello, world!!"
+  logBG("info", `Sending test request to ${provider}`, { model })
   try {
     if (provider === "gemini") {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
@@ -73,28 +81,39 @@ async function handleTestApi({ provider, apiKey, model }: any) {
   }
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, isPremium }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, isPremium }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
-  const promptTemplateFromStorage = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
+  
+  let promptTemplate = ""
 
-  let promptTemplate = promptTemplateFromStorage
+  if (chatHistory) {
+      promptTemplate = await storage.get<string>("continuousPromptTemplate") || CONTINUOUS_CONVERSATION_PROMPT
+  } else {
+      promptTemplate = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
+  }
+
+  let prompt = promptTemplate
 
   // Sanitize prompt to avoid Safety/Prohibited Content errors
   replacementRules.forEach(rule => {
     // Use global replacement to catch all instances
-    promptTemplate = promptTemplate.split(rule.from).join(rule.to)
+    prompt = prompt.split(rule.from).join(rule.to)
   })
 
   if (isPremium) {
-    promptTemplate = promptTemplate.replace("200文字以内", "500文字以内")
+    prompt = prompt.replace("200文字以内", "500文字以内")
     await logBG("info", "Premium message: Limit expanded to 500 characters")
   }
 
-  const prompt = promptTemplate
+  prompt = prompt
     .replace("{my_info_clean}", myProfile)
     .replace("{target_info_clean}", targetProfile)
 
-  await logBG("info", `Using AI Provider: ${aiProvider}`, { isPremium })
+  if (chatHistory) {
+      prompt = prompt.replace("{chat_history}", chatHistory)
+  }
+
+  await logBG("info", `Using AI Provider: ${aiProvider}`, { isPremium: !!isPremium, hasHistory: !!chatHistory })
 
   if (aiProvider === "gemini") {
     const model = await storage.get("geminiModel") || "gemini-1.5-flash"
@@ -110,22 +129,72 @@ async function generateWithGemini(prompt: string, model: string) {
   if (!apiKey) throw new Error("Gemini API Key is not set")
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      safetySettings: [
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-      ]
-    })
-  })
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || "Gemini API Error")
+  
+  let retries = 0
+  const maxRetries = 3
+  
+  while (retries <= maxRetries) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          safetySettings: [
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+          ]
+        })
+      })
+
+      if (response.status === 503) {
+        throw new Error("Overloaded")
+      }
+
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error?.message || "Gemini API Error")
+      }
+
+      const data = await response.json()
+      const candidate = data.candidates?.[0]
+      const text = candidate?.content?.parts?.[0]?.text
+    
+      if (!text) {
+        await logBG("error", "Gemini Raw Response for Empty Text", { data })
+    
+        let details = "UNKNOWN_ERROR"
+        if (candidate?.finishReason) {
+          details = `FinishReason: ${candidate.finishReason}`
+        } else if (data.promptFeedback) {
+          const blockReason = data.promptFeedback.blockReason
+          if (blockReason) {
+            details = `PromptBlocked: ${blockReason}`
+          } else {
+            details = `PromptFeedback: ${JSON.stringify(data.promptFeedback)}`
+          }
+        }
+    
+        throw new Error(`Gemini generated no text. (${details})`)
+      }
+    
+      return { text }
+
+    } catch (e: any) {
+      if (e.message === "Overloaded" && retries < maxRetries) {
+        retries++
+        const waitTime = Math.pow(2, retries) * 1000
+        await logBG("warn", `Gemini Overloaded. Retrying in ${waitTime}ms... (${retries}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+        continue
+      }
+      if (e.message === "Overloaded") {
+         throw new Error("サーバーが現在混雑しています (503 Overloaded)。時間をおいて試すか、オプション画面でモデルを変更してください。")
+      }
+      throw e
+    }
   }
   const data = await response.json()
   const candidate = data.candidates?.[0]

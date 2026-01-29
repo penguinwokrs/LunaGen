@@ -55,7 +55,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                     await addLog("warn", "Cached profile ID mismatch", { cachedId, currentUserId }, "CONTENT")
                     targetProfileText = "" // invalidate
                 } else {
-                    targetProfileText = extractProfileFromJSON(data)
+                    targetProfileText = extractProfileFromJSON(targetData)
                 }
             }
 
@@ -76,14 +76,40 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 return
             }
 
+            // 2.5 Get Chat History
+            let chatHistory = ""
+            const cachedHistory = sessionStorage.getItem("luna_chat_history")
+            const isMessagePage = location.href.includes("/message/") || location.href.includes("/matching/")
+
+            if (cachedHistory && isMessagePage) {
+                try {
+                    const historyData = JSON.parse(cachedHistory)
+                    const messages = historyData.messages || []
+                    const partnerId = historyData.partnerId
+
+                    // Use last 15 messages
+                    const recentMessages = messages.slice(-15)
+                    chatHistory = recentMessages
+                        // biome-ignore lint/suspicious/noExplicitAny: Message type
+                        .map((m: any) => {
+                            const isPartner = String(m.user_id) === String(partnerId)
+                            return `${isPartner ? "Partner" : "Me"}: ${m.message}`
+                        })
+                        .join("\n")
+                } catch (e) {
+                    console.error("Failed to parse chat history", e)
+                }
+            }
+
             // 3. Generate Message
             const isPremium = document.body.innerText.includes("プレミアムメッセージを送る")
-            await addLog("info", `Requesting generation (Premium: ${isPremium})`, null, "CONTENT")
+            await addLog("info", `Requesting generation (Premium: ${isPremium})`, { hasHistory: !!chatHistory }, "CONTENT")
 
             const response = await chrome.runtime.sendMessage({
                 action: "generate_message",
                 myProfile: myProfileText,
                 targetProfile: targetProfileText,
+                chatHistory: chatHistory,
                 isPremium: isPremium
             })
 

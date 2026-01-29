@@ -7,7 +7,7 @@ import { ApiConfigSection } from "./components/Options/ApiConfigSection"
 import { DebugLogsSection } from "./components/Options/DebugLogsSection"
 import { MyProfileSection } from "./components/Options/MyProfileSection"
 import { PromptTemplateSection } from "./components/Options/PromptTemplateSection"
-import { DEFAULT_PROMPT } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
 
 const storage = new Storage({ area: "local" })
@@ -20,6 +20,7 @@ export default function Options() {
   const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: syncStorage }, "")
   const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
   const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
+  const [continuousPromptTemplate, setContinuousPromptTemplate] = useStorage({ key: "continuousPromptTemplate", instance: storage }, CONTINUOUS_CONVERSATION_PROMPT)
   const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")
   const [myProfileUpdatedAt, setMyProfileUpdatedAt] = useStorage({ key: "myProfileUpdatedAt", instance: storage }, "")
   const [isDebugEnabled, setIsDebugEnabled] = useStorage({ key: "isDebugEnabled", instance: storage }, process.env.NODE_ENV === "development")
@@ -161,7 +162,12 @@ export default function Options() {
       <PromptTemplateSection
         promptTemplate={promptTemplate}
         setPromptTemplate={setPromptTemplate}
-        onReset={() => setPromptTemplate(DEFAULT_PROMPT)}
+        continuousPromptTemplate={continuousPromptTemplate}
+        setContinuousPromptTemplate={setContinuousPromptTemplate}
+        onReset={() => {
+          setPromptTemplate(DEFAULT_PROMPT)
+          setContinuousPromptTemplate(CONTINUOUS_CONVERSATION_PROMPT)
+        }}
       />
 
       <button

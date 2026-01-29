@@ -89,6 +89,33 @@ window.addEventListener("message", async (event) => {
       updateAgeInDOM()
     }
   }
+
+  // メッセージリスト（会話履歴 + 相手情報）
+  if (url.includes("/api/user/message/list/")) {
+    const userInfo = data.user_info
+    const messageList = data.message_list
+
+    if (userInfo) {
+      // プロフィール情報のキャッシュ更新
+      sessionStorage.setItem(
+        "luna_last_viewed_user",
+        JSON.stringify({ user: userInfo })
+      )
+      addLog("info", "Partner Profile cached from Message List", null, "CONTENT")
+    }
+
+    if (messageList) {
+      sessionStorage.setItem(
+        "luna_chat_history",
+        JSON.stringify({
+          messages: messageList,
+          partnerId: userInfo?.id,
+          cachedAt: new Date().toISOString()
+        })
+      )
+      addLog("info", "Chat History Cached", { count: messageList.length }, "CONTENT")
+    }
+  }
 })
 
 /**
@@ -102,16 +129,24 @@ function initObserver() {
 
     updateAgeInDOM()
 
-    // 相手のプロフィールページである場合のみボタンを挿入
-    const isTargetProfilePage = location.pathname.includes("/user/show/") || location.pathname.includes("/user/service/show/")
+    // 相手のプロフィールページ または メッセージページ である場合のみボタンを挿入
+    const isTargetPage =
+      location.pathname.includes("/user/show/") ||
+      location.pathname.includes("/user/service/show/") ||
+      location.href.includes("/message") ||
+      location.href.includes("/matching")
 
-    if (isTargetProfilePage) {
+    if (isTargetPage) {
       const textareas = document.querySelectorAll("textarea")
       textareas.forEach((textarea) => {
         if (textarea.dataset.lunaAiInjected === "true") return
         textarea.dataset.lunaAiInjected = "true"
 
         const container = document.createElement("div")
+        // 親要素がflexの場合など崩れを防ぐため、textareaの直後に挿入するように変更検討
+        // ただし既存実装(parentElement.appendChild)で動くなら維持。
+        // リクエストのHTMLを見る限りフォーム直下なのでappendでも大丈夫そうだが、
+        // 念のためスタイルを当てるか、確実に表示されるようにする
         textarea.parentElement?.appendChild(container)
         const root = createRoot(container)
         root.render(<GenerateButton textarea={textarea} />)
