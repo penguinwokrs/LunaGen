@@ -94,12 +94,6 @@ async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, is
 
   let prompt = promptTemplate
 
-  // Sanitize prompt to avoid Safety/Prohibited Content errors
-  replacementRules.forEach(rule => {
-    // Use global replacement to catch all instances
-    prompt = prompt.split(rule.from).join(rule.to)
-  })
-
   if (isPremium) {
     prompt = prompt.replace("200文字以内", "500文字以内")
     await logBG("info", "Premium message: Limit expanded to 500 characters")
@@ -112,6 +106,13 @@ async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, is
   if (chatHistory) {
       prompt = prompt.replace("{chat_history}", chatHistory)
   }
+
+  // Sanitize prompt to avoid Safety/Prohibited Content errors
+  // IMPORTANT: This must be done AFTER replacing variables like {my_info_clean}
+  replacementRules.forEach(rule => {
+    // Use global replacement to catch all instances
+    prompt = prompt.split(rule.from).join(rule.to)
+  })
 
   await logBG("info", `Using AI Provider: ${aiProvider}`, { isPremium: !!isPremium, hasHistory: !!chatHistory })
 
