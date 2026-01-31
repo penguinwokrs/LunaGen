@@ -114,7 +114,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             })
 
             if (response && response.error) {
-                await addLog("error", "AI Generation Error Response", { error: response.error }, "CONTENT")
+                await addLog("error", `AI Generation Error: ${response.error}`, { error: response.error }, "CONTENT")
                 setError(true)
             } else if (response && response.text) {
                 await addLog("info", "AI Generation Success", null, "CONTENT")

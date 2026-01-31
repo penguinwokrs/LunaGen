@@ -83,13 +83,13 @@ async function handleTestApi({ provider, apiKey, model }: any) {
 
 async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, isPremium }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
-  
+
   let promptTemplate = ""
 
   if (chatHistory) {
-      promptTemplate = await storage.get<string>("continuousPromptTemplate") || CONTINUOUS_CONVERSATION_PROMPT
+    promptTemplate = await storage.get<string>("continuousPromptTemplate") || CONTINUOUS_CONVERSATION_PROMPT
   } else {
-      promptTemplate = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
+    promptTemplate = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
   }
 
   let prompt = promptTemplate
@@ -104,7 +104,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, is
     .replace("{target_info_clean}", targetProfile)
 
   if (chatHistory) {
-      prompt = prompt.replace("{chat_history}", chatHistory)
+    prompt = prompt.replace("{chat_history}", chatHistory)
   }
 
   // Sanitize prompt to avoid Safety/Prohibited Content errors
@@ -114,14 +114,35 @@ async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, is
     prompt = prompt.split(rule.from).join(rule.to)
   })
 
+  // Debug & Logging Logic
+  const isDebugEnabled = await storage.get<boolean>("isDebugEnabled")
+  // Safe dev check
+  const isDev = (() => {
+    try {
+      // @ts-ignore
+      return process.env.NODE_ENV === "development"
+    } catch { return false }
+  })()
+
+  if (isDebugEnabled || isDev) {
+    console.log("Gemini Prompt Debug:", JSON.stringify(prompt))
+    await logBG("info", `Gemini Prompt Debug: ${prompt}`)
+  }
+
   await logBG("info", `Using AI Provider: ${aiProvider}`, { isPremium: !!isPremium, hasHistory: !!chatHistory })
 
-  if (aiProvider === "gemini") {
-    const model = await storage.get("geminiModel") || "gemini-1.5-flash"
-    return await generateWithGemini(prompt, model)
-  } else {
-    const model = await storage.get("openaiModel") || "gpt-4o"
-    return await generateWithOpenAI(prompt, model)
+  try {
+    if (aiProvider === "gemini") {
+      const model = await storage.get("geminiModel") || "gemini-1.5-flash"
+      return await generateWithGemini(prompt, model)
+    } else {
+      const model = await storage.get("openaiModel") || "gpt-4o"
+      return await generateWithOpenAI(prompt, model)
+    }
+  } catch (e: any) {
+    // Log prompt on error - append to message to ensure it's saved/displayed
+    await logBG("error", `Generation Failed. Prompt was: ${prompt}`, { error: e.message })
+    throw e
   }
 }
 
@@ -130,10 +151,10 @@ async function generateWithGemini(prompt: string, model: string) {
   if (!apiKey) throw new Error("Gemini API Key is not set")
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-  
+
   let retries = 0
   const maxRetries = 3
-  
+
   while (retries <= maxRetries) {
     try {
       const response = await fetch(url, {
@@ -162,10 +183,10 @@ async function generateWithGemini(prompt: string, model: string) {
       const data = await response.json()
       const candidate = data.candidates?.[0]
       const text = candidate?.content?.parts?.[0]?.text
-    
+
       if (!text) {
         await logBG("error", "Gemini Raw Response for Empty Text", { data })
-    
+
         let details = "UNKNOWN_ERROR"
         if (candidate?.finishReason) {
           details = `FinishReason: ${candidate.finishReason}`
@@ -177,10 +198,10 @@ async function generateWithGemini(prompt: string, model: string) {
             details = `PromptFeedback: ${JSON.stringify(data.promptFeedback)}`
           }
         }
-    
+
         throw new Error(`Gemini generated no text. (${details})`)
       }
-    
+
       return { text }
 
     } catch (e: any) {
@@ -192,34 +213,12 @@ async function generateWithGemini(prompt: string, model: string) {
         continue
       }
       if (e.message === "Overloaded") {
-         throw new Error("サーバーが現在混雑しています (503 Overloaded)。時間をおいて試すか、オプション画面でモデルを変更してください。")
+        throw new Error("サーバーが現在混雑しています (503 Overloaded)。時間をおいて試すか、オプション画面でモデルを変更してください。")
       }
       throw e
     }
   }
-  const data = await response.json()
-  const candidate = data.candidates?.[0]
-  const text = candidate?.content?.parts?.[0]?.text
 
-  if (!text) {
-    await logBG("error", "Gemini Raw Response for Empty Text", { data })
-
-    let details = "UNKNOWN_ERROR"
-    if (candidate?.finishReason) {
-      details = `FinishReason: ${candidate.finishReason}`
-    } else if (data.promptFeedback) {
-      const blockReason = data.promptFeedback.blockReason
-      if (blockReason) {
-        details = `PromptBlocked: ${blockReason}`
-      } else {
-        details = `PromptFeedback: ${JSON.stringify(data.promptFeedback)}`
-      }
-    }
-
-    throw new Error(`Gemini generated no text. (${details})`)
-  }
-
-  return { text }
 }
 
 async function generateWithOpenAI(prompt: string, model: string) {
