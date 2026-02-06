@@ -94,5 +94,17 @@ export const replacementRules = [
     {
         "from": "教育",
         "to": "教えてあげる"
-    }
+    },
+    {
+        "from": "SM",
+        "to": "特別な関係"
+    },
+    {
+        "from": "拘束",
+        "to": "固定"
+    },
+    {
+        "from": "露出",
+        "to": "開放的な体験"
+    },
 ]
