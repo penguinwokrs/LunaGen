@@ -109,10 +109,21 @@ async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, is
 
   // Sanitize prompt to avoid Safety/Prohibited Content errors
   // IMPORTANT: This must be done AFTER replacing variables like {my_info_clean}
+  if (!prompt) {
+    await logBG("error", "Prompt became empty before sanitization", { promptTemplate })
+    throw new Error("プロンプトの作成に失敗しました。設定画面でプロンプトテンプレートを確認してください。")
+  }
+
   replacementRules.forEach(rule => {
-    // Use global replacement to catch all instances
-    prompt = prompt.split(rule.from).join(rule.to)
+    if (rule.from) {
+      // Use global replacement to catch all instances
+      prompt = prompt.split(rule.from).join(rule.to || "")
+    }
   })
+
+  if (!prompt || prompt.length < 50) {
+    await logBG("warn", "Prompt is suspicious small after sanitization", { promptLength: prompt?.length })
+  }
 
   // Debug & Logging Logic
   const isDebugEnabled = await storage.get<boolean>("isDebugEnabled")

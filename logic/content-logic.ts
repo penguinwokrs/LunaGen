@@ -63,13 +63,23 @@ export async function getPartnerProfile(userId: string, isService: boolean = fal
 
         const data = await res.json()
 
+        if (!data) {
+            throw new Error("API returned empty data")
+        }
+
         // Cache this for next time
         sessionStorage.setItem("luna_last_viewed_user", JSON.stringify(data))
 
-        const targetData = data.user || data.profile || data
-        return extractProfileFromJSON(targetData)
+        const targetData = data.user || data.profile || data.member || data
+        const text = extractProfileFromJSON(targetData)
+
+        if (!text || text.length < 10) {
+            await addLog("warn", "Extracted partner profile is very short or empty", { text, data }, "CONTENT")
+        }
+
+        return text
     } catch (e: any) {
-        await addLog("error", "Failed to fetch partner profile", { error: e.toString() }, "CONTENT")
+        await addLog("error", "Failed to fetch partner profile", { error: e.toString(), userId }, "CONTENT")
         return null
     }
 }
