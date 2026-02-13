@@ -40,10 +40,6 @@ export const replacementRules = [
         "to": "マッサージ"
     },
     {
-        "from": "プレイ",
-        "to": "時間"
-    },
-    {
         "from": "男性器",
         "to": "男性の方"
     },
