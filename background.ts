@@ -81,7 +81,7 @@ async function handleTestApi({ provider, apiKey, model }: any) {
   }
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, isPremium }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
   let promptTemplate = ""
@@ -102,6 +102,10 @@ async function handleGenerateMessage({ myProfile, targetProfile, chatHistory, is
   prompt = prompt
     .replace("{my_info_clean}", myProfile)
     .replace("{target_info_clean}", targetProfile)
+
+  // Replace [相手の名前] with actual name or "ゲスト"
+  const nameToUse = targetName && targetName.trim() ? targetName.trim() : "ゲスト"
+  prompt = prompt.split("[相手の名前]").join(nameToUse)
 
   if (chatHistory) {
     prompt = prompt.replace("{chat_history}", chatHistory)

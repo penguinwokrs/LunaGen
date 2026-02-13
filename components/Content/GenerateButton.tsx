@@ -59,6 +59,13 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 }
             }
 
+            let targetName = ""
+            if (cachedTarget) {
+                 const data = JSON.parse(cachedTarget)
+                 const targetData = data.user || data.profile || data
+                 targetName = targetData.name || targetData.nickname || ""
+            }
+
             // Fallback: Fetch if missing or invalid
             if ((!targetProfileText || targetProfileText.length < 10) && currentUserId) {
                 await addLog("info", "Attempting fallback fetch for partner profile", { currentUserId }, "CONTENT")
@@ -66,6 +73,14 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 const fetchedText = await getPartnerProfile(currentUserId, isService)
                 if (fetchedText) {
                     targetProfileText = fetchedText
+                    // Try to extract name from text if we don't have the object easily available from getPartnerProfile (which returns text)
+                    // But getPartnerProfile seems to just return text.
+                    // We might need to improve getPartnerProfile or just parse the text.
+                    // For now, let's rely on the text parsing
+                    const nameMatch = fetchedText.match(/名前: (.+)/)
+                    if (nameMatch) {
+                        targetName = nameMatch[1].trim()
+                    }
                 }
             }
 
@@ -109,6 +124,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 action: "generate_message",
                 myProfile: myProfileText,
                 targetProfile: targetProfileText,
+                targetName: targetName,
                 chatHistory: chatHistory,
                 isPremium: isPremium
             })
