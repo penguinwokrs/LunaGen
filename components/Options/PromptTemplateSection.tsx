@@ -16,12 +16,16 @@ export const PromptTemplateSection = ({
     onReset
 }: PromptTemplateSectionProps) => {
     const [activeTab, setActiveTab] = React.useState<"initial" | "continuous">("initial")
+    const [resetKey, setResetKey] = React.useState(0)
     return (
         <section style={{ marginBottom: "30px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h2 style={{ fontSize: "1.2rem" }}>3. プロンプトテンプレート</h2>
                 <button
-                    onClick={onReset}
+                    onClick={() => {
+                        onReset()
+                        setResetKey(prev => prev + 1)
+                    }}
                     style={{
                         padding: "4px 8px",
                         backgroundColor: "#f8f9fa",
@@ -80,14 +84,16 @@ export const PromptTemplateSection = ({
 
             {activeTab === "initial" ? (
                 <textarea
-                    value={promptTemplate}
+                    key={`initial-${resetKey}`}
+                    defaultValue={promptTemplate}
                     onChange={(e) => setPromptTemplate(e.target.value)}
                     rows={12}
                     style={{ width: "100%", padding: "10px", boxSizing: "border-box", fontFamily: "monospace", lineHeight: "1.4" }}
                 />
             ) : (
                 <textarea
-                    value={continuousPromptTemplate}
+                    key={`continuous-${resetKey}`}
+                    defaultValue={continuousPromptTemplate}
                     onChange={(e) => setContinuousPromptTemplate(e.target.value)}
                     rows={12}
                     style={{ width: "100%", padding: "10px", boxSizing: "border-box", fontFamily: "monospace", lineHeight: "1.4" }}
