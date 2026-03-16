@@ -10,9 +10,10 @@
     "package": "plasmo package"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@ai-sdk/google": "^3.0.43",
+    "@ai-sdk/openai": "^3.0.41",
     "@plasmohq/storage": "^1.15.0",
-    "openai": "^6.16.0",
+    "ai": "^6.0.116",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",

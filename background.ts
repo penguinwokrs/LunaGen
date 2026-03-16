@@ -1,8 +1,11 @@
+import { generateText } from "ai"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
 import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT } from "./constants"
 import { addLog } from "./utils/logger"
 
-import { replacementRules } from "./assets/replacement_rules"
+import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
 
 const storage = new Storage({ area: "local" })
 const syncStorage = new Storage({ area: "sync" })
@@ -44,37 +47,20 @@ async function handleTestApi({ provider, apiKey, model }: any) {
   logBG("info", `Sending test request to ${provider}`, { model })
   try {
     if (provider === "gemini") {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: testPrompt }] }] })
+      const google = createGoogleGenerativeAI({ apiKey })
+      const { text } = await generateText({
+        model: google(model),
+        prompt: testPrompt,
       })
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.error?.message || "Gemini API Error")
-      }
-      const data = await response.json()
-      return { success: true, text: data.candidates?.[0]?.content?.parts?.[0]?.text || "" }
+      return { success: true, text: text || "" }
     } else {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [{ role: "user", content: testPrompt }],
-          max_tokens: 10
-        })
+      const openai = createOpenAI({ apiKey })
+      const { text } = await generateText({
+        model: openai(model),
+        prompt: testPrompt,
+        maxTokens: 10,
       })
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.error?.message || "OpenAI API Error")
-      }
-      const data = await response.json()
-      return { success: true, text: data.choices?.[0]?.message?.content || "" }
+      return { success: true, text: text || "" }
     }
   } catch (e: any) {
     return { success: false, error: e.message }
@@ -95,8 +81,11 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   let prompt = promptTemplate
 
   if (isPremium) {
-    prompt = prompt.replace("200文字以内", "500文字以内")
-    await logBG("info", "Premium message: Limit expanded to 500 characters")
+    prompt = prompt.replace(
+      "文字数は、句読点、記号、カッコ、空白、改行などすべてを含めて合計200文字以内（厳守）。",
+      "文字数は、句読点、記号、カッコ、空白、改行などすべてを含めて合計500文字以内（厳守）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可。"
+    )
+    await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
 
   prompt = prompt
@@ -118,6 +107,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     throw new Error("プロンプトの作成に失敗しました。設定画面でプロンプトテンプレートを確認してください。")
   }
 
+  const replacementRules = await storage.get<{ from: string; to: string }[]>("replacementRules") || defaultReplacementRules
   replacementRules.forEach(rule => {
     if (rule.from) {
       // Use global replacement to catch all instances
@@ -165,69 +155,42 @@ async function generateWithGemini(prompt: string, model: string) {
   const apiKey = await syncStorage.get("geminiApiKey")
   if (!apiKey) throw new Error("Gemini API Key is not set")
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+  const google = createGoogleGenerativeAI({ apiKey })
 
   let retries = 0
   const maxRetries = 3
 
   while (retries <= maxRetries) {
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+      const { text, finishReason } = await generateText({
+        model: google(model, {
           safetySettings: [
             { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-          ]
-        })
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+          ],
+        }),
+        prompt,
       })
 
-      if (response.status === 503) {
-        throw new Error("Overloaded")
-      }
-
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.error?.message || "Gemini API Error")
-      }
-
-      const data = await response.json()
-      const candidate = data.candidates?.[0]
-      const text = candidate?.content?.parts?.[0]?.text
-
       if (!text) {
-        await logBG("error", "Gemini Raw Response for Empty Text", { data })
-
-        let details = "UNKNOWN_ERROR"
-        if (candidate?.finishReason) {
-          details = `FinishReason: ${candidate.finishReason}`
-        } else if (data.promptFeedback) {
-          const blockReason = data.promptFeedback.blockReason
-          if (blockReason) {
-            details = `PromptBlocked: ${blockReason}`
-          } else {
-            details = `PromptFeedback: ${JSON.stringify(data.promptFeedback)}`
-          }
-        }
-
-        throw new Error(`Gemini generated no text. (${details})`)
+        await logBG("error", "Gemini generated empty text", { finishReason })
+        throw new Error(`Gemini generated no text. (FinishReason: ${finishReason})`)
       }
 
       return { text }
 
     } catch (e: any) {
-      if (e.message === "Overloaded" && retries < maxRetries) {
+      const isOverloaded = e.message?.includes("503") || e.message?.includes("Overloaded")
+      if (isOverloaded && retries < maxRetries) {
         retries++
         const waitTime = Math.pow(2, retries) * 1000
         await logBG("warn", `Gemini Overloaded. Retrying in ${waitTime}ms... (${retries}/${maxRetries})`)
         await new Promise(resolve => setTimeout(resolve, waitTime))
         continue
       }
-      if (e.message === "Overloaded") {
+      if (isOverloaded) {
         throw new Error("サーバーが現在混雑しています (503 Overloaded)。時間をおいて試すか、オプション画面でモデルを変更してください。")
       }
       throw e
@@ -240,25 +203,14 @@ async function generateWithOpenAI(prompt: string, model: string) {
   const apiKey = await syncStorage.get("openaiApiKey")
   if (!apiKey) throw new Error("OpenAI API Key is not set")
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        { role: "system", content: "You are a helpful assistant." },
-        { role: "user", content: prompt }
-      ],
-      max_tokens: 500
-    })
+  const openai = createOpenAI({ apiKey })
+
+  const { text } = await generateText({
+    model: openai(model),
+    system: "You are a helpful assistant.",
+    prompt,
+    maxTokens: 500,
   })
-  if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || "OpenAI API Error")
-  }
-  const data = await response.json()
-  return { text: data.choices?.[0]?.message?.content || "" }
+
+  return { text: text || "" }
 }

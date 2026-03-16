@@ -31,3 +31,6 @@ dist/
 
 # typescript
 .tsbuildinfo
+
+# claude
+.claude/settings.local.json

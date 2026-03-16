@@ -7,6 +7,8 @@ import { ApiConfigSection } from "./components/Options/ApiConfigSection"
 import { DebugLogsSection } from "./components/Options/DebugLogsSection"
 import { MyProfileSection } from "./components/Options/MyProfileSection"
 import { PromptTemplateSection } from "./components/Options/PromptTemplateSection"
+import { ReplacementRulesSection, type ReplacementRule } from "./components/Options/ReplacementRulesSection"
+import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
 import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
 
@@ -19,10 +21,13 @@ export default function Options() {
   const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-1.5-flash")
   const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: syncStorage }, "")
   const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
+  const [geminiModelList, setGeminiModelList] = useStorage<string[]>({ key: "geminiModelList", instance: storage }, [])
+  const [openaiModelList, setOpenaiModelList] = useStorage<string[]>({ key: "openaiModelList", instance: storage }, [])
   const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
   const [continuousPromptTemplate, setContinuousPromptTemplate] = useStorage({ key: "continuousPromptTemplate", instance: storage }, CONTINUOUS_CONVERSATION_PROMPT)
   const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")
   const [myProfileUpdatedAt, setMyProfileUpdatedAt] = useStorage({ key: "myProfileUpdatedAt", instance: storage }, "")
+  const [replacementRules, setReplacementRules] = useStorage<ReplacementRule[]>({ key: "replacementRules", instance: storage }, defaultReplacementRules as ReplacementRule[])
   const [isDebugEnabled, setIsDebugEnabled] = useStorage({ key: "isDebugEnabled", instance: storage }, process.env.NODE_ENV === "development")
   const [debugLogs, setDebugLogs] = useStorage<any[]>({ key: "debugLogs", instance: storage }, [])
 
@@ -83,11 +88,11 @@ export default function Options() {
     }
   }
 
-  const runApiTest = async (provider: "gemini" | "openai") => {
-    const apiKey = provider === "gemini" ? geminiApiKey : openaiApiKey
+  const runApiTest = async (provider: "gemini" | "openai", apiKey?: string) => {
+    const key = apiKey || (provider === "gemini" ? geminiApiKey : openaiApiKey)
     const model = provider === "gemini" ? geminiModel : openaiModel
 
-    if (!apiKey) {
+    if (!key) {
       alert("APIキーを入力してください")
       return
     }
@@ -95,7 +100,7 @@ export default function Options() {
     setTestResults(prev => ({ ...prev, [provider]: { loading: true } }))
     try {
       const response: any = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: "test_api", provider, apiKey, model }, resolve)
+        chrome.runtime.sendMessage({ action: "test_api", provider, apiKey: key, model }, resolve)
       })
       if (response.success) {
         setTestResults(prev => ({ ...prev, [provider]: { loading: false, result: response.text } }))
@@ -151,10 +156,14 @@ export default function Options() {
         setGeminiApiKey={setGeminiApiKey}
         geminiModel={geminiModel}
         setGeminiModel={setGeminiModel}
+        geminiModelList={geminiModelList}
+        setGeminiModelList={setGeminiModelList}
         openaiApiKey={openaiApiKey}
         setOpenaiApiKey={setOpenaiApiKey}
         openaiModel={openaiModel}
         setOpenaiModel={setOpenaiModel}
+        openaiModelList={openaiModelList}
+        setOpenaiModelList={setOpenaiModelList}
         testResults={testResults}
         onRunApiTest={runApiTest}
       />
@@ -168,6 +177,11 @@ export default function Options() {
           setPromptTemplate(DEFAULT_PROMPT)
           setContinuousPromptTemplate(CONTINUOUS_CONVERSATION_PROMPT)
         }}
+      />
+
+      <ReplacementRulesSection
+        rules={replacementRules}
+        setRules={setReplacementRules}
       />
 
       <button
