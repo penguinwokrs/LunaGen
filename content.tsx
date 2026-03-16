@@ -29,16 +29,35 @@ function updateAgeInDOM() {
   }
 
   try {
-    const xpath = "/html/body/div[1]/div/div/main/div/div/div[2]/div/div[2]/div[1]/small/div/span[2]"
-    const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null)
-    const element = result.singleNodeValue as HTMLElement
+    const newText = `${lastTargetUser.age}歳`
+    let updated = false
 
-    if (element) {
-      const newText = `${lastTargetUser.age}歳`
-      if (element.innerText !== newText) {
-        element.innerText = newText
-        addLog("info", `DOM Age Updated: ${newText}`, null, "CONTENT")
+    // 基本情報セクション: 「年齢」ラベルの隣の値を更新
+    const allDivs = document.querySelectorAll("div")
+    for (const div of allDivs) {
+      if (div.childNodes.length === 1 && div.childNodes[0].nodeType === 3 && div.textContent?.trim() === "年齢") {
+        const valueDiv = div.nextElementSibling as HTMLElement
+        if (valueDiv && valueDiv.textContent !== newText) {
+          valueDiv.textContent = newText
+          updated = true
+        }
+        break
       }
+    }
+
+    // ヘッダー: 「地域 年齢範囲 性別 | ...」のテキストを更新
+    const ageRangePattern = /\d{2}代(?:前半|半ば|後半)|10代後半|60代以上/
+    const allPs = document.querySelectorAll("p")
+    for (const p of allPs) {
+      if (ageRangePattern.test(p.textContent || "")) {
+        p.textContent = p.textContent!.replace(ageRangePattern, newText)
+        updated = true
+        break
+      }
+    }
+
+    if (updated) {
+      addLog("info", `DOM Age Updated: ${newText}`, null, "CONTENT")
     }
   } catch (e: any) {
     addLog("error", "Failed to update age in DOM", { error: e.toString() }, "CONTENT")
