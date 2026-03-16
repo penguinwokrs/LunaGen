@@ -43,6 +43,12 @@ jobs:
       - name: Package the extension
         run: pnpm package
 
+      - name: Create CRX
+        run: |
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > /tmp/extension.pem
+          npx crx3 build/chrome-mv3-prod -o build/chrome-mv3-prod.crx -p /tmp/extension.pem
+          rm /tmp/extension.pem
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
@@ -53,5 +59,6 @@ jobs:
           generate_release_notes: true
           files: |
             build/chrome-mv3-prod.zip
+            build/chrome-mv3-prod.crx
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

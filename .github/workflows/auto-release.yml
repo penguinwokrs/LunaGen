@@ -48,6 +48,12 @@ jobs:
           pnpm build
           pnpm package
 
+      - name: Create CRX
+        run: |
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > /tmp/extension.pem
+          npx crx3 build/chrome-mv3-prod -o build/chrome-mv3-prod.crx -p /tmp/extension.pem
+          rm /tmp/extension.pem
+
       - name: Commit and Push Version Bump
         run: |
           git config --local user.email "action@github.com"
@@ -72,5 +78,6 @@ jobs:
           generate_release_notes: true
           files: |
             build/chrome-mv3-prod.zip
+            build/chrome-mv3-prod.crx
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
