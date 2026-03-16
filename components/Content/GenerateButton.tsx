@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import { getMyProfile, insertText, getPartnerProfile } from "../../logic/content-logic"
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
+import { generateApproachHint } from "../../utils/kink-analysis"
 import { getUserIdFromUrl } from "../../utils/url"
 
 interface GenerateButtonProps {
@@ -60,10 +61,12 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             }
 
             let targetName = ""
+            let kinkHint = ""
             if (cachedTarget) {
                  const data = JSON.parse(cachedTarget)
                  const targetData = data.user || data.profile || data
                  targetName = targetData.name || targetData.nickname || ""
+                 kinkHint = generateApproachHint(targetData)
             }
 
             // Fallback: Fetch if missing or invalid
@@ -126,7 +129,8 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 targetProfile: targetProfileText,
                 targetName: targetName,
                 chatHistory: chatHistory,
-                isPremium: isPremium
+                isPremium: isPremium,
+                kinkHint: kinkHint
             })
 
             if (response && response.error) {

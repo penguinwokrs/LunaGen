@@ -67,7 +67,7 @@ async function handleTestApi({ provider, apiKey, model }: any) {
   }
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, kinkHint }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
   let promptTemplate = ""
@@ -98,6 +98,17 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
 
   if (chatHistory) {
     prompt = prompt.replace("{chat_history}", chatHistory)
+  }
+
+  // Inject kink approach hint before target profile section
+  if (kinkHint) {
+    const marker = "# 相手のプロフィール"
+    if (prompt.includes(marker)) {
+      prompt = prompt.replace(marker, `# 相手の嗜好に基づくアプローチ戦略\n${kinkHint}\n\n${marker}`)
+    } else {
+      // Custom prompt without marker - append hint before target info
+      prompt += `\n\n# 相手の嗜好に基づくアプローチ戦略\n${kinkHint}`
+    }
   }
 
   // Sanitize prompt to avoid Safety/Prohibited Content errors

@@ -36,7 +36,8 @@ window.XMLHttpRequest = function () {
           url.includes("/api/user/service/show/") ||
           url.includes("/api/user/profile") ||
           url.includes("/api/user/get/me") ||
-          url.includes("/api/user/message/list/"))
+          url.includes("/api/user/message/list/") ||
+          url.includes("/api/v2/search"))
       ) {
         try {
           const responseData = JSON.parse(this.responseText)
@@ -76,7 +77,8 @@ window.fetch = async (...args) => {
     url.includes("/api/user/auth") ||
     url.includes("/api/user/get/me") ||
     url.includes("/api/user/profile") ||
-    url.includes("/api/user/message/list/")
+    url.includes("/api/user/message/list/") ||
+    url.includes("/api/v2/search")
   ) {
     try {
       const buffer = await clone.arrayBuffer()

@@ -14,6 +14,7 @@ export const config: PlasmoCSConfig = {
 const storage = new Storage({ area: "local" })
 let lastTargetUser: { id: string; age: number | string } | null = null
 let lastUrl = location.href
+const searchUserAgeMap: Map<string, number | string> = new Map()
 
 
 
@@ -65,6 +66,38 @@ function updateAgeInDOM() {
 }
 
 /**
+ * 検索一覧の年齢表示を実年齢に書き換え
+ */
+function updateSearchListAges() {
+  if (searchUserAgeMap.size === 0) return
+
+  const ageRangePattern = /\d{2}代(?:前半|半ば|後半)|10代後半|60代以上/
+  const links = document.querySelectorAll<HTMLAnchorElement>('a[href*="/user/show/"]')
+
+  for (const link of links) {
+    const match = link.getAttribute("href")?.match(/\/user\/show\/(\d+)/)
+    if (!match) continue
+
+    const userId = match[1]
+    const age = searchUserAgeMap.get(userId)
+    if (age === undefined) continue
+
+    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      const text = node.textContent || ""
+      if (ageRangePattern.test(text)) {
+        const newText = text.replace(ageRangePattern, `${age}歳`)
+        if (node.textContent !== newText) {
+          node.textContent = newText
+        }
+        break
+      }
+    }
+  }
+}
+
+/**
  * APIインターセプターからのメッセージを処理
  */
 window.addEventListener("message", async (event) => {
@@ -109,6 +142,20 @@ window.addEventListener("message", async (event) => {
     }
   }
 
+  // 検索一覧のユーザー年齢データ
+  if (url.includes("/api/v2/search")) {
+    const users = Array.isArray(data) ? data : (data.users || data.data || [])
+    if (Array.isArray(users)) {
+      for (const user of users) {
+        if (user.id && user.age) {
+          searchUserAgeMap.set(String(user.id), user.age)
+        }
+      }
+      updateSearchListAges()
+      addLog("info", `Search ages cached: ${users.length} users`, null, "CONTENT")
+    }
+  }
+
   // メッセージリスト（会話履歴 + 相手情報）
   if (url.includes("/api/user/message/list/")) {
     const userInfo = data.user_info
@@ -147,6 +194,7 @@ function initObserver() {
     }
 
     updateAgeInDOM()
+    updateSearchListAges()
 
     // 相手のプロフィールページ または メッセージページ である場合のみボタンを挿入
     const isTargetPage =

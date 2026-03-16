@@ -1,3 +1,5 @@
+import { formatKinkSection } from "./kink-analysis"
+
 /**
  * LunaのユーザーJSONからプロフィールテキストを抽出する
  *
@@ -60,14 +62,10 @@ export function extractProfileFromJSON(u: any, rawResponse?: any): string {
         text += `\n【NGなこと・拒否】\n${typeof ng === "string" ? ng : JSON.stringify(ng, null, 2)}\n`
     }
 
-    // 数値データのマッピング (例: 支配欲)
-    if (data.q_dom !== undefined) {
-        const domMap: any = { 1: "なし", 2: "微弱", 3: "中", 4: "強", 5: "最強" }
-        text += `\n支配欲(Dom): ${domMap[data.q_dom] || data.q_dom}`
-    }
-    if (data.q_sub !== undefined) {
-        const subMap: any = { 1: "なし", 2: "微弱", 3: "中", 4: "強", 5: "最強" }
-        text += `\n被支配欲(Sub): ${subMap[data.q_sub] || data.q_sub}`
+    // 嗜好分析（全q_*フィールド + my_typeの象限分類）
+    const kinkSection = formatKinkSection(data)
+    if (kinkSection) {
+        text += kinkSection
     }
 
     const result = text.trim()
