@@ -15,6 +15,7 @@
       ]
     },
     "baseUrl": ".",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "jsx": "react-jsx"
   }
 }
