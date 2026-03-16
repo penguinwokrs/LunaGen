@@ -30,7 +30,7 @@ export async function getMyProfile() {
 
         const data = await res.json()
         const profileData = data.profile || data.user || data
-        const text = extractProfileFromJSON(profileData)
+        const text = extractProfileFromJSON(profileData, data)
 
         if (text && text.length > 10) {
             await storage.set("myProfile", text)
@@ -71,7 +71,7 @@ export async function getPartnerProfile(userId: string, isService: boolean = fal
         sessionStorage.setItem("luna_last_viewed_user", JSON.stringify(data))
 
         const targetData = data.user || data.profile || data.member || data
-        const text = extractProfileFromJSON(targetData)
+        const text = extractProfileFromJSON(targetData, data)
 
         if (!text || text.length < 10) {
             await addLog("warn", "Extracted partner profile is very short or empty", { text, data }, "CONTENT")

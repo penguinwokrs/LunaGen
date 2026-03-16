@@ -55,7 +55,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                     await addLog("warn", "Cached profile ID mismatch", { cachedId, currentUserId }, "CONTENT")
                     targetProfileText = "" // invalidate
                 } else {
-                    targetProfileText = extractProfileFromJSON(targetData)
+                    targetProfileText = extractProfileFromJSON(targetData, data)
                 }
             }
 

@@ -1,21 +1,42 @@
 /**
  * LunaのユーザーJSONからプロフィールテキストを抽出する
- * 
+ *
  * @param u APIから取得したユーザーオブジェクト
+ * @param rawResponse APIレスポンス全体（age_list, area_list等のルックアップテーブル用）
  * @returns 抽出されたテキスト
  */
-export function extractProfileFromJSON(u: any): string {
+export function extractProfileFromJSON(u: any, rawResponse?: any): string {
     if (!u) return ""
 
     // Handle nested data if it exists
     const data = u.user || u.profile || u.member || u
 
+    // Lookup tables from the raw API response
+    const ageList = rawResponse?.age_list
+    const areaList = rawResponse?.area_list
+    const sexList = rawResponse?.sex_list
+
     let text = ""
     if (data.name || data.nickname) text += `名前: ${data.name || data.nickname}\n`
-    if (data.age) text += `年齢: ${data.age}\n`
+    if (data.age) {
+        const age = Number(data.age)
+        if (age >= 18 && age <= 99) {
+            text += `年齢: ${age}歳\n`
+        } else {
+            const ageDisplay = ageList?.[String(data.age)]
+            text += `年齢: ${ageDisplay || "非公開"}\n`
+        }
+    }
+    if (data.sex) {
+        const sexDisplay = sexList?.[String(data.sex)]
+        if (sexDisplay) text += `性別: ${sexDisplay}\n`
+    }
+    if (data.area) {
+        const areaDisplay = areaList?.[String(data.area)]
+        if (areaDisplay) text += `居住地: ${areaDisplay}\n`
+    }
     if (data.relationship_text || data.relationship) text += `目的: ${data.relationship_text || data.relationship}\n`
     if (data.work_text || data.work) text += `職業: ${data.work_text || data.work}\n`
-    if (data.residence_text || data.residence) text += `居住地: ${data.residence_text || data.residence}\n`
 
     // 自己紹介 (複数のプロパティ名をサポート)
     const intro = data.profile || data.introduction || data.intro || data.body
