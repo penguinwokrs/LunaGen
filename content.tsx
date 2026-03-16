@@ -65,7 +65,7 @@ window.addEventListener("message", async (event) => {
   // プロフィール更新検知 (自分)
   if (url.includes("/api/user/auth") || url.includes("/api/user/get/me") || url.includes("/api/user/profile")) {
     const profileData = data.profile || data.user || data
-    const profileText = extractProfileFromJSON(profileData)
+    const profileText = extractProfileFromJSON(profileData, data)
     if (profileText && profileText.length > 10) {
       await storage.set("myProfile", profileText)
       const now = new Date()
