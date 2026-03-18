@@ -82,8 +82,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
 
   if (isPremium) {
     prompt = prompt.replace(
-      "文字数は、句読点、記号、カッコ、空白、改行などすべてを含めて合計200文字以内（厳守）。",
-      "文字数は、句読点、記号、カッコ、空白、改行などすべてを含めて合計500文字以内（厳守）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可。"
+      "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守）。",
+      "文字数は句読点・記号・空白・改行すべて含めて合計500文字以内（厳守）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可。"
     )
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }

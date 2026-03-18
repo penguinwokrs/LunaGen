@@ -81,6 +81,23 @@ export const PromptTemplateSection = ({
                     </>
                 )}
             </div>
+            <details style={{ fontSize: "0.8em", color: "#888", marginBottom: "10px" }}>
+                <summary style={{ cursor: "pointer", color: "#e91e63" }}>
+                    プロフィール変数に含まれる情報
+                </summary>
+                <div style={{ marginTop: "6px", padding: "8px 12px", background: "#f9f9f9", borderRadius: "4px", lineHeight: "1.6" }}>
+                    自分・相手のプロフィールには、APIから取得した以下の情報が含まれます:
+                    <ul style={{ margin: "6px 0", paddingLeft: "20px" }}>
+                        <li><strong>基本情報</strong> — 名前、年齢、性別、居住地、目的、職業</li>
+                        <li><strong>自己紹介</strong> — プロフィール本文</li>
+                        <li><strong>嗜好・プレイスタイル</strong> — 好みやスタイルのフリーテキスト</li>
+                        <li><strong>求める条件</strong> — 相手に求める条件</li>
+                        <li><strong>NGなこと・拒否</strong> — 拒否事項</li>
+                        <li><strong>嗜好分析</strong> — タイプ傾向・嗜好スコア・強い傾向（q_*値から自動算出）</li>
+                    </ul>
+                    さらに嗜好分析の結果に基づき、<strong>「相手の嗜好に基づくアプローチ戦略」</strong>がプロンプトに自動注入されます。
+                </div>
+            </details>
 
             {activeTab === "initial" ? (
                 <textarea
