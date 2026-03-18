@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react"
+import { Storage } from "@plasmohq/storage"
 import { getMyProfile, insertText, getPartnerProfile } from "../../logic/content-logic"
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
-import { generateApproachHint } from "../../utils/kink-analysis"
+import { generateApproachHint, generateCompatibilityHint } from "../../utils/kink-analysis"
 import { getUserIdFromUrl } from "../../utils/url"
+
+const storage = new Storage({ area: "local" })
 
 interface GenerateButtonProps {
     textarea: HTMLTextAreaElement
@@ -62,11 +65,23 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
 
             let targetName = ""
             let kinkHint = ""
+            let compatibilityHint = ""
             if (cachedTarget) {
                  const data = JSON.parse(cachedTarget)
                  const targetData = data.user || data.profile || data
                  targetName = targetData.name || targetData.nickname || ""
                  kinkHint = generateApproachHint(targetData)
+
+                 // 自分のraw dataから相性ヒントを生成
+                 const myRawJson = await storage.get("myProfileRaw")
+                 if (myRawJson) {
+                     try {
+                         const myRawData = JSON.parse(myRawJson as string)
+                         compatibilityHint = generateCompatibilityHint(myRawData, targetData)
+                     } catch (e) {
+                         await addLog("warn", "Failed to parse myProfileRaw for compatibility", null, "CONTENT")
+                     }
+                 }
             }
 
             // Fallback: Fetch if missing or invalid
@@ -130,7 +145,8 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 targetName: targetName,
                 chatHistory: chatHistory,
                 isPremium: isPremium,
-                kinkHint: kinkHint
+                kinkHint: kinkHint,
+                compatibilityHint: compatibilityHint
             })
 
             if (response && response.error) {

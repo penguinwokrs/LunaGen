@@ -151,3 +151,51 @@ export function generateApproachHint(data: any): string {
 
   return hints[analysis.approachType] || hints.balanced
 }
+
+/**
+ * 自分と相手の嗜好データから相性ヒントを生成
+ * 共通点が強い場合は踏み込んだ暗示表現を使う
+ */
+export function generateCompatibilityHint(myData: any, targetData: any): string {
+  const myAnalysis = analyzeKinkType(myData)
+  const targetAnalysis = analyzeKinkType(targetData)
+
+  const hints: string[] = []
+
+  // 相補性チェック: dom↔sub の組み合わせ
+  const myHasDom = myAnalysis.quadrants.includes("dom-sadist") || myAnalysis.quadrants.includes("dom-masochist")
+  const myHasSub = myAnalysis.quadrants.includes("sub-masochist")
+  const targetHasDom = targetAnalysis.quadrants.includes("dom-sadist") || targetAnalysis.quadrants.includes("dom-masochist")
+  const targetHasSub = targetAnalysis.quadrants.includes("sub-masochist")
+
+  if (myHasDom && targetHasSub) {
+    hints.push("【強い相性】相手はリードされたい・委ねたい傾向があり、あなたのリードしたい傾向と非常に相性が良い。「引っ張ってくれそう」「この人になら任せられそう」と感じさせる余裕のある言い回しを使うこと。")
+  } else if (myHasSub && targetHasDom) {
+    hints.push("【強い相性】相手はリードしたい・主導権を握りたい傾向があり、あなたの受容的な傾向と非常に相性が良い。「この子は素直で可愛い」と思わせるような、甘え上手な雰囲気を出すこと。")
+  }
+
+  // 共通の高スコア特性（両者ともスコア3以上）
+  const COMPATIBILITY_HINTS: Record<string, string> = {
+    "快楽": "【共通】お互い気持ちよさ・心地よさを大切にするタイプ。「一緒にいたら気持ちいい時間を過ごせそう」と感じさせる表現を積極的に使うこと。",
+    "依存": "【共通】お互い深い繋がりや独占的な関係を求めるタイプ。「あなただけ」「ずっと一緒にいたい」方向のニュアンスを匂わせると強く刺さる。",
+    "拘束": "【共通】お互い束縛や独占に理解があるタイプ。「離したくない」「自分だけのもの」的なニュアンスを暗示的に出すと響く。",
+    "羞恥": "【共通】お互い恥じらいに興奮を覚えるタイプ。相手を少しドキッとさせるような際どい褒め方や、内面に踏み込む表現が効果的。",
+    "支配欲": "【共通】お互い主導権への関心が高いタイプ。「どっちが上か」的な軽い駆け引きや挑発的な言い回しが刺さりやすい。",
+  }
+
+  for (const myScore of myAnalysis.scores) {
+    if (myScore.value < 3) continue
+    const targetScore = targetAnalysis.scores.find(s => s.label === myScore.label)
+    if (targetScore && targetScore.value >= 3) {
+      const hint = COMPATIBILITY_HINTS[myScore.label]
+      if (hint) {
+        hints.push(hint)
+      }
+    }
+  }
+
+  if (hints.length === 0) return ""
+
+  // 最大2つまでに絞る
+  return hints.slice(0, 2).join("\n")
+}

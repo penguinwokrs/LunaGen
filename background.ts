@@ -67,7 +67,7 @@ async function handleTestApi({ provider, apiKey, model }: any) {
   }
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, kinkHint }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, kinkHint, compatibilityHint }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
   let promptTemplate = ""
@@ -100,14 +100,35 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     prompt = prompt.replace("{chat_history}", chatHistory)
   }
 
+  // Boost weight of 「求める条件」 for initial messages
+  if (!chatHistory && targetProfile.includes("【求める条件】")) {
+    const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
+    if (reqMatch) {
+      const reqText = reqMatch[1].trim()
+      const boostSection = `# 最重要：相手が求める条件への対応\n相手は以下の条件を明示しています。自分のプロフィールの中でこの条件に合致する要素があれば、メッセージ内でさりげなく伝わるようにすること。合致しない場合は無理に触れなくてよいが、矛盾する印象を与えないこと。\n条件: ${reqText}`
+      const marker = "# メッセージの方針"
+      if (prompt.includes(marker)) {
+        prompt = prompt.replace(marker, `${boostSection}\n\n${marker}`)
+      } else {
+        prompt = `${boostSection}\n\n${prompt}`
+      }
+    }
+  }
+
   // Inject kink approach hint before target profile section
-  if (kinkHint) {
+  if (kinkHint || compatibilityHint) {
     const marker = "# 相手のプロフィール"
+    let hintSection = ""
+    if (kinkHint) {
+      hintSection += `# 相手の嗜好に基づくアプローチ戦略\n${kinkHint}\n\n`
+    }
+    if (compatibilityHint) {
+      hintSection += `# 嗜好の相性に基づくアプローチ\n${compatibilityHint}\n\n`
+    }
     if (prompt.includes(marker)) {
-      prompt = prompt.replace(marker, `# 相手の嗜好に基づくアプローチ戦略\n${kinkHint}\n\n${marker}`)
+      prompt = prompt.replace(marker, `${hintSection}${marker}`)
     } else {
-      // Custom prompt without marker - append hint before target info
-      prompt += `\n\n# 相手の嗜好に基づくアプローチ戦略\n${kinkHint}`
+      prompt += `\n\n${hintSection.trimEnd()}`
     }
   }
 

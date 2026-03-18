@@ -34,6 +34,7 @@ export async function getMyProfile() {
 
         if (text && text.length > 10) {
             await storage.set("myProfile", text)
+            await storage.set("myProfileRaw", JSON.stringify(profileData))
             const now = new Date()
             const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
             await storage.set("myProfileUpdatedAt", dateStr)
