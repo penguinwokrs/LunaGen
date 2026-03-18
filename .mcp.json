@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--categoryExtensions",
+        "--chromeArg=--load-extension=/home/owner/projects/github.com/penguinwokrs/matting/build/chrome-mv3-prod"
+      ]
+    }
+  }
+}
