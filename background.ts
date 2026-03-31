@@ -82,8 +82,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
 
   if (isPremium) {
     prompt = prompt.replace(
-      "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守）。",
-      "文字数は句読点・記号・空白・改行すべて含めて合計500文字以内（厳守）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可。"
+      "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守。200文字を1文字でも超えたら失格）",
+      "文字数は句読点・記号・空白・改行すべて含めて合計500文字以内（厳守。500文字を1文字でも超えたら失格）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可"
     )
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
@@ -100,35 +100,42 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     prompt = prompt.replace("{chat_history}", chatHistory)
   }
 
-  // Boost weight of 「求める条件」 for initial messages
-  if (!chatHistory && targetProfile.includes("【求める条件】")) {
-    const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
-    if (reqMatch) {
-      const reqText = reqMatch[1].trim()
-      const boostSection = `# 最重要：相手が求める条件への対応\n相手は以下の条件を明示しています。自分のプロフィールの中でこの条件に合致する要素があれば、メッセージ内でさりげなく伝わるようにすること。合致しない場合は無理に触れなくてよいが、矛盾する印象を与えないこと。\n条件: ${reqText}`
-      const marker = "# メッセージの方針"
-      if (prompt.includes(marker)) {
-        prompt = prompt.replace(marker, `${boostSection}\n\n${marker}`)
-      } else {
-        prompt = `${boostSection}\n\n${prompt}`
+  // Build structured analysis section before target profile
+  {
+    const analysisSections: string[] = []
+
+    // 1. 嗜好マッチング分析（approach hint + compatibility hint）
+    if (kinkHint || compatibilityHint) {
+      let kinkSection = "# 嗜好マッチング分析\n"
+      if (kinkHint) {
+        kinkSection += `## アプローチ戦略\n${kinkHint}\n\n`
+      }
+      if (compatibilityHint) {
+        kinkSection += `## 相性の詳細\n${compatibilityHint}\n`
+      }
+      analysisSections.push(kinkSection.trimEnd())
+    }
+
+    // 2. 求める条件の強調（初回メッセージのみ）
+    if (!chatHistory && targetProfile.includes("【求める条件】")) {
+      const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
+      if (reqMatch) {
+        const reqText = reqMatch[1].trim()
+        analysisSections.push(
+          `# 相手が明示している求める条件\n以下は相手が自ら書いた「求める条件」です。自分のプロフィールでこの条件に合致する要素を特定し、メッセージ内でさりげなく伝わるようにすること。\n\n${reqText}`
+        )
       }
     }
-  }
 
-  // Inject kink approach hint before target profile section
-  if (kinkHint || compatibilityHint) {
-    const marker = "# 相手のプロフィール"
-    let hintSection = ""
-    if (kinkHint) {
-      hintSection += `# 相手の嗜好に基づくアプローチ戦略\n${kinkHint}\n\n`
-    }
-    if (compatibilityHint) {
-      hintSection += `# 嗜好の相性に基づくアプローチ\n${compatibilityHint}\n\n`
-    }
-    if (prompt.includes(marker)) {
-      prompt = prompt.replace(marker, `${hintSection}${marker}`)
-    } else {
-      prompt += `\n\n${hintSection.trimEnd()}`
+    // Insert analysis before target profile section
+    if (analysisSections.length > 0) {
+      const analysisBlock = analysisSections.join("\n\n")
+      const marker = "# 相手のプロフィール"
+      if (prompt.includes(marker)) {
+        prompt = prompt.replace(marker, `${analysisBlock}\n\n${marker}`)
+      } else {
+        prompt += `\n\n${analysisBlock}`
+      }
     }
   }
 

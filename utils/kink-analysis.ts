@@ -42,7 +42,7 @@ const Q_FIELDS: { key: string; label: string }[] = [
 interface KinkAnalysis {
   quadrants: string[]
   quadrantLabels: string[]
-  scores: { label: string; value: number }[]
+  scores: { label: string; value: number; key: string }[]
   highTraits: string[]
   approachType: string
 }
@@ -65,11 +65,11 @@ export function analyzeKinkType(data: any): KinkAnalysis {
   const quadrantLabels = quadrants.map(q => QUADRANT_LABELS[q]).filter(Boolean)
 
   // q_* スコア収集
-  const scores: { label: string; value: number }[] = []
+  const scores: { label: string; value: number; key: string }[] = []
   for (const f of Q_FIELDS) {
     const val = data[f.key]
     if (val !== undefined && val !== null) {
-      scores.push({ label: f.label, value: Number(val) })
+      scores.push({ label: f.label, value: Number(val), key: f.key })
     }
   }
 
@@ -153,49 +153,84 @@ export function generateApproachHint(data: any): string {
 }
 
 /**
- * 自分と相手の嗜好データから相性ヒントを生成
- * 共通点が強い場合は踏み込んだ暗示表現を使う
+ * 自分と相手の嗜好データから詳細な相性分析を生成
+ * プロンプトの「嗜好マッチング分析」セクションとして注入される
  */
 export function generateCompatibilityHint(myData: any, targetData: any): string {
   const myAnalysis = analyzeKinkType(myData)
   const targetAnalysis = analyzeKinkType(targetData)
 
-  const hints: string[] = []
+  const sections: string[] = []
 
-  // 相補性チェック: dom↔sub の組み合わせ
+  // === 1. S/M・Dom/Sub の相補性分析 ===
   const myHasDom = myAnalysis.quadrants.includes("dom-sadist") || myAnalysis.quadrants.includes("dom-masochist")
   const myHasSub = myAnalysis.quadrants.includes("sub-masochist")
   const targetHasDom = targetAnalysis.quadrants.includes("dom-sadist") || targetAnalysis.quadrants.includes("dom-masochist")
   const targetHasSub = targetAnalysis.quadrants.includes("sub-masochist")
 
   if (myHasDom && targetHasSub) {
-    hints.push("【強い相性】相手はリードされたい・委ねたい傾向があり、あなたのリードしたい傾向と非常に相性が良い。「引っ張ってくれそう」「この人になら任せられそう」と感じさせる余裕のある言い回しを使うこと。")
+    sections.push("【S/M相性: 非常に良い】あなた=S寄り、相手=M寄り。相手は委ねたい・導かれたい傾向あり。メッセージでは余裕と包容力を自然に出すこと。「引っ張ってくれそう」と感じさせる言い回しが効果的。ただし初回から「躾けてあげる」等の直接的な宣言は禁止。")
   } else if (myHasSub && targetHasDom) {
-    hints.push("【強い相性】相手はリードしたい・主導権を握りたい傾向があり、あなたの受容的な傾向と非常に相性が良い。「この子は素直で可愛い」と思わせるような、甘え上手な雰囲気を出すこと。")
+    sections.push("【S/M相性: 非常に良い】あなた=M寄り、相手=S寄り。相手は主導権を握りたい傾向あり。甘え上手で素直な印象を出すと刺さる。「この子は可愛い」と思わせる反応が効果的。")
+  } else if (myHasDom && targetHasDom) {
+    sections.push("【S/M相性: 同タイプ】お互いS寄り。主導権の駆け引きを楽しめる関係。軽い挑発や「どっちが上か」的なニュアンスが刺さりやすい。")
+  } else if (myHasSub && targetHasSub) {
+    sections.push("【S/M相性: 同タイプ】お互いM寄り。共感ベースのアプローチが有効。「分かる、その感覚」的な共感表現が刺さる。")
   }
 
-  // 共通の高スコア特性（両者ともスコア3以上）
-  const COMPATIBILITY_HINTS: Record<string, string> = {
-    "快楽": "【共通】お互い気持ちよさ・心地よさを大切にするタイプ。「一緒にいたら気持ちいい時間を過ごせそう」と感じさせる表現を積極的に使うこと。",
-    "依存": "【共通】お互い深い繋がりや独占的な関係を求めるタイプ。「あなただけ」「ずっと一緒にいたい」方向のニュアンスを匂わせると強く刺さる。",
-    "拘束": "【共通】お互い束縛や独占に理解があるタイプ。「離したくない」「自分だけのもの」的なニュアンスを暗示的に出すと響く。",
-    "羞恥": "【共通】お互い恥じらいに興奮を覚えるタイプ。相手を少しドキッとさせるような際どい褒め方や、内面に踏み込む表現が効果的。",
-    "支配欲": "【共通】お互い主導権への関心が高いタイプ。「どっちが上か」的な軽い駆け引きや挑発的な言い回しが刺さりやすい。",
+  // === 2. 嗜好スコアの共通高スコア分析 ===
+  const sharedHighTraits: { label: string; myVal: number; targetVal: number; hint: string }[] = []
+
+  const TRAIT_HINTS: Record<string, string> = {
+    "性行為": "お互い性的な繋がりへの関心が高い。身体的な相性への期待を暗示的に匂わせると効果的。",
+    "苦痛": "お互い痛みへの理解がある。「限界を超える感覚」「追い込まれる快感」等の暗示的な表現が強く刺さる。",
+    "支配欲": "お互い支配/被支配への関心が高い。力関係や主従のニュアンスを匂わせる表現が有効。",
+    "拘束": "お互い束縛・拘束への関心がある。「離さない」「独占」的なニュアンスが響く。",
+    "羞恥": "お互い羞恥への感受性が高い。少しドキッとさせる際どい褒め方や、内面に踏み込む表現が効果的。",
+    "快楽": "お互い快楽・心地よさを重視。「一緒にいたら気持ちいい時間が過ごせそう」的な表現が自然に刺さる。",
+    "依存": "お互い深い繋がりへの欲求がある。「特別な存在」「あなただけ」的な独占的ニュアンスが刺さる。",
   }
 
   for (const myScore of myAnalysis.scores) {
     if (myScore.value < 3) continue
     const targetScore = targetAnalysis.scores.find(s => s.label === myScore.label)
     if (targetScore && targetScore.value >= 3) {
-      const hint = COMPATIBILITY_HINTS[myScore.label]
+      const hint = TRAIT_HINTS[myScore.label]
       if (hint) {
-        hints.push(hint)
+        sharedHighTraits.push({
+          label: myScore.label,
+          myVal: myScore.value,
+          targetVal: targetScore.value,
+          hint,
+        })
       }
     }
   }
 
-  if (hints.length === 0) return ""
+  if (sharedHighTraits.length > 0) {
+    // スコア合計が高い順にソート
+    sharedHighTraits.sort((a, b) => (b.myVal + b.targetVal) - (a.myVal + a.targetVal))
+    const traitLines = sharedHighTraits.map(t =>
+      `- ${t.label}（自分:${t.myVal} / 相手:${t.targetVal}）: ${t.hint}`
+    )
+    sections.push(`【共通する嗜好】以下の嗜好で高い共通性あり。これらを活用してメッセージに深みを出すこと：\n${traitLines.join("\n")}`)
+  }
 
-  // 最大2つまでに絞る
-  return hints.slice(0, 2).join("\n")
+  // === 3. 相手だけ高い特性（相手が求めているもの） ===
+  const targetOnlyHigh: string[] = []
+  for (const targetScore of targetAnalysis.scores) {
+    if (targetScore.value < 4) continue
+    const myScore = myAnalysis.scores.find(s => s.label === targetScore.label)
+    if (!myScore || myScore.value < 3) {
+      targetOnlyHigh.push(targetScore.label)
+    }
+  }
+
+  if (targetOnlyHigh.length > 0) {
+    sections.push(`【相手が特に重視する嗜好】${targetOnlyHigh.join("、")} — これらは相手にとって重要だが自分との共通度は低い。無理に触れる必要はないが、否定的な印象を与えないこと。`)
+  }
+
+  if (sections.length === 0) return ""
+
+  return sections.join("\n\n")
 }
