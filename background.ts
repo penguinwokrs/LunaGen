@@ -81,10 +81,14 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   let prompt = promptTemplate
 
   if (isPremium) {
-    prompt = prompt.replace(
-      "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守。200文字を1文字でも超えたら失格）",
-      "文字数は句読点・記号・空白・改行すべて含めて合計500文字以内（厳守。500文字を1文字でも超えたら失格）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可"
-    )
+    const premiumLimit = "文字数は句読点・記号・空白・改行すべて含めて合計500文字以内（厳守。500文字を1文字でも超えたら失格）。できる限り480〜500文字ギリギリまで使い切り、内容を充実させること。短すぎるメッセージは不可"
+    const normalLimit = "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守。200文字を1文字でも超えたら失格）"
+    if (prompt.includes(normalLimit)) {
+      prompt = prompt.replace(normalLimit, premiumLimit)
+    } else {
+      // Custom template without the standard limit string — append premium instruction
+      prompt += `\n\n# 文字数制約（最重要）\n${premiumLimit}`
+    }
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
 
@@ -181,7 +185,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
       return await generateWithGemini(prompt, model)
     } else {
       const model = await storage.get("openaiModel") || "gpt-4o"
-      return await generateWithOpenAI(prompt, model)
+      return await generateWithOpenAI(prompt, model, !!isPremium)
     }
   } catch (e: any) {
     // Log prompt on error - append to message to ensure it's saved/displayed
@@ -238,7 +242,7 @@ async function generateWithGemini(prompt: string, model: string) {
 
 }
 
-async function generateWithOpenAI(prompt: string, model: string) {
+async function generateWithOpenAI(prompt: string, model: string, isPremium = false) {
   const apiKey = await syncStorage.get("openaiApiKey")
   if (!apiKey) throw new Error("OpenAI API Key is not set")
 
@@ -248,7 +252,7 @@ async function generateWithOpenAI(prompt: string, model: string) {
     model: openai(model),
     system: "You are a helpful assistant.",
     prompt,
-    maxTokens: 500,
+    maxTokens: isPremium ? 2000 : 500,
   })
 
   return { text: text || "" }

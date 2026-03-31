@@ -107,4 +107,8 @@ export const replacementRules = [
         "from": "クリ責め",
         "to": "繊細な刺激"
     },
+    {
+        "from": "痛めつけ",
+        "to": "追い込み"
+    }
 ]
