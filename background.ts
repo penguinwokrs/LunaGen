@@ -104,8 +104,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     }
     // Expand content rules: touch more topics to naturally fill 500 chars
     prompt = prompt.replace(
-      "最も強く刺さりそうな1〜2点に絞って触れる。詰め込みすぎない",
-      "分析結果から3〜4点に触れ、それぞれ自分の具体的な体験やエピソードを交えて深く掘り下げる。4〜5段落で構成し、各段落に十分な厚みを持たせること"
+      "詰め込みすぎない。A・Bそれぞれ1点ずつ、計2点が理想",
+      "A・Bそれぞれ2〜3点ずつ触れ、各点に自分の具体的な体験やエピソードを交えて深く掘り下げる。4〜5段落で構成し、各段落に十分な厚みを持たせること"
     )
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
@@ -208,7 +208,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
         return await generateWithOllama(p, model, `http://${host}:${port}`)
       }
       case "gemini": {
-        const model = await storage.get("geminiModel") || "gemini-1.5-flash"
+        const model = await storage.get("geminiModel") || "gemini-2.5-flash"
         return await generateWithGemini(p, model)
       }
       case "openai": {
