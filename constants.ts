@@ -108,3 +108,7 @@ export const OPENAI_MODELS = [
     "o1-2024-12-17",
     "gpt-3.5-turbo",
 ];
+
+export const OLLAMA_DEFAULT_HOST = "localhost";
+export const OLLAMA_DEFAULT_PORT = "11434";
+export const OLLAMA_DEFAULT_MODEL = "jaahas/qwen3.5-uncensored:9b";

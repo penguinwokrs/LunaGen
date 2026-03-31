@@ -2,14 +2,13 @@ import { useState } from "react"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
 
-import { AiProviderSection } from "./components/Options/AiProviderSection"
 import { ApiConfigSection } from "./components/Options/ApiConfigSection"
 import { DebugLogsSection } from "./components/Options/DebugLogsSection"
 import { MyProfileSection } from "./components/Options/MyProfileSection"
 import { PromptTemplateSection } from "./components/Options/PromptTemplateSection"
 import { ReplacementRulesSection, type ReplacementRule } from "./components/Options/ReplacementRulesSection"
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
 
 const storage = new Storage({ area: "local" })
@@ -23,10 +22,15 @@ export default function Options() {
   const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
   const [geminiModelList, setGeminiModelList] = useStorage<string[]>({ key: "geminiModelList", instance: storage }, [])
   const [openaiModelList, setOpenaiModelList] = useStorage<string[]>({ key: "openaiModelList", instance: storage }, [])
+  const [ollamaHost, setOllamaHost] = useStorage({ key: "ollamaHost", instance: storage }, OLLAMA_DEFAULT_HOST)
+  const [ollamaPort, setOllamaPort] = useStorage({ key: "ollamaPort", instance: storage }, OLLAMA_DEFAULT_PORT)
+  const [ollamaModel, setOllamaModel] = useStorage({ key: "ollamaModel", instance: storage }, OLLAMA_DEFAULT_MODEL)
+  const [ollamaModelList, setOllamaModelList] = useStorage<string[]>({ key: "ollamaModelList", instance: storage }, [])
   const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
   const [continuousPromptTemplate, setContinuousPromptTemplate] = useStorage({ key: "continuousPromptTemplate", instance: storage }, CONTINUOUS_CONVERSATION_PROMPT)
   const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")
   const [myProfileUpdatedAt, setMyProfileUpdatedAt] = useStorage({ key: "myProfileUpdatedAt", instance: storage }, "")
+  const [replacementRulesEnabled, setReplacementRulesEnabled] = useStorage({ key: "replacementRulesEnabled", instance: storage }, true)
   const [replacementRules, setReplacementRules] = useStorage<ReplacementRule[]>({ key: "replacementRules", instance: storage }, defaultReplacementRules as ReplacementRule[])
   const [isDebugEnabled, setIsDebugEnabled] = useStorage({ key: "isDebugEnabled", instance: storage }, process.env.NODE_ENV === "development")
   const [debugLogs, setDebugLogs] = useStorage<any[]>({ key: "debugLogs", instance: storage }, [])
@@ -34,11 +38,6 @@ export default function Options() {
   const [status, setStatus] = useState<{ message: string, type: "success" | "error" } | null>(null)
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [testResults, setTestResults] = useState<{ [key: string]: { loading: boolean, result?: string, error?: string } }>({})
-
-  const handleSave = () => {
-    setStatus({ message: "設定を保存しました！", type: "success" })
-    setTimeout(() => setStatus(null), 2000)
-  }
 
   const addLocalLog = (level: string, message: string, detail?: any) => {
     if (!isDebugEnabled) return
@@ -88,7 +87,24 @@ export default function Options() {
     }
   }
 
-  const runApiTest = async (provider: "gemini" | "openai", apiKey?: string) => {
+  const runApiTest = async (provider: "gemini" | "openai" | "ollama", apiKey?: string) => {
+    if (provider === "ollama") {
+      setTestResults(prev => ({ ...prev, ollama: { loading: true } }))
+      try {
+        const response: any = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: "test_api", provider: "ollama", model: ollamaModel, baseURL: `http://${ollamaHost}:${ollamaPort}` }, resolve)
+        })
+        if (response.success) {
+          setTestResults(prev => ({ ...prev, ollama: { loading: false, result: response.text } }))
+        } else {
+          setTestResults(prev => ({ ...prev, ollama: { loading: false, error: response.error } }))
+        }
+      } catch (e: any) {
+        setTestResults(prev => ({ ...prev, ollama: { loading: false, error: e.message } }))
+      }
+      return
+    }
+
     const key = apiKey || (provider === "gemini" ? geminiApiKey : openaiApiKey)
     const model = provider === "gemini" ? geminiModel : openaiModel
 
@@ -111,9 +127,6 @@ export default function Options() {
       setTestResults(prev => ({ ...prev, [provider]: { loading: false, error: e.message } }))
     }
   }
-
-  const isGeminiReady = !!geminiApiKey
-  const isOpenAIReady = !!openaiApiKey
 
   return (
     <div style={{ padding: "40px 20px 20px", maxWidth: "700px", margin: "0 auto", fontFamily: "sans-serif", color: "#333", position: "relative" }}>
@@ -142,16 +155,9 @@ export default function Options() {
         onFetchProfile={fetchMyProfile}
       />
 
-      <AiProviderSection
-        aiProvider={aiProvider}
-        setAiProvider={setAiProvider}
-        testResults={testResults}
-        isGeminiReady={isGeminiReady}
-        isOpenAIReady={isOpenAIReady}
-      />
-
       <ApiConfigSection
         aiProvider={aiProvider}
+        setAiProvider={setAiProvider}
         geminiApiKey={geminiApiKey}
         setGeminiApiKey={setGeminiApiKey}
         geminiModel={geminiModel}
@@ -164,6 +170,14 @@ export default function Options() {
         setOpenaiModel={setOpenaiModel}
         openaiModelList={openaiModelList}
         setOpenaiModelList={setOpenaiModelList}
+        ollamaHost={ollamaHost}
+        setOllamaHost={setOllamaHost}
+        ollamaPort={ollamaPort}
+        setOllamaPort={setOllamaPort}
+        ollamaModel={ollamaModel}
+        setOllamaModel={setOllamaModel}
+        ollamaModelList={ollamaModelList}
+        setOllamaModelList={setOllamaModelList}
         testResults={testResults}
         onRunApiTest={runApiTest}
       />
@@ -180,20 +194,11 @@ export default function Options() {
       />
 
       <ReplacementRulesSection
+        enabled={replacementRulesEnabled}
+        setEnabled={setReplacementRulesEnabled}
         rules={replacementRules}
         setRules={setReplacementRules}
       />
-
-      <button
-        onClick={handleSave}
-        style={{
-          width: "100%", padding: "12px", backgroundColor: "#e91e63", color: "white",
-          border: "none", cursor: "pointer", borderRadius: "4px", fontWeight: "bold",
-          fontSize: "1rem", marginBottom: "40px"
-        }}
-      >
-        設定を保存
-      </button>
 
       <DebugLogsSection
         isDebugEnabled={isDebugEnabled}
