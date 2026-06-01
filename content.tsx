@@ -5,100 +5,13 @@ import { createRoot } from "react-dom/client"
 import { GenerateButton } from "./components/Content/GenerateButton"
 import { addLog } from "./utils/logger"
 import { extractProfileFromJSON } from "./utils/profile"
-import { getUserIdFromUrl } from "./utils/url"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://*.luna-matching.com/*", "https://luna-matching.com/*"]
 }
 
 const storage = new Storage({ area: "local" })
-let lastTargetUser: { id: string; age: number | string } | null = null
 let lastUrl = location.href
-const searchUserAgeMap: Map<string, number | string> = new Map()
-
-
-
-/**
- * 年齢表示を更新するDOM操作
- */
-function updateAgeInDOM() {
-  if (!lastTargetUser) return
-
-  // プロフィール詳細ページ以外では全 div 走査をしない(負荷削減)
-  if (!/\/user\/(?:service\/)?show\/\d+/.test(location.pathname)) return
-
-  const currentUserId = getUserIdFromUrl(location.pathname)
-  if (currentUserId && lastTargetUser.id !== currentUserId) {
-    return
-  }
-
-  try {
-    const newText = `${lastTargetUser.age}歳`
-    let updated = false
-
-    // 基本情報セクション: 「年齢」ラベルの隣の値を更新
-    const allDivs = document.querySelectorAll("div")
-    for (const div of allDivs) {
-      if (div.childNodes.length === 1 && div.childNodes[0].nodeType === 3 && div.textContent?.trim() === "年齢") {
-        const valueDiv = div.nextElementSibling as HTMLElement
-        if (valueDiv && valueDiv.textContent !== newText) {
-          valueDiv.textContent = newText
-          updated = true
-        }
-        break
-      }
-    }
-
-    // ヘッダー: 「地域 年齢範囲 性別 | ...」のテキストを更新
-    const ageRangePattern = /\d{2}代(?:前半|半ば|後半)|10代後半|60代以上/
-    const allPs = document.querySelectorAll("p")
-    for (const p of allPs) {
-      if (ageRangePattern.test(p.textContent || "")) {
-        p.textContent = p.textContent!.replace(ageRangePattern, newText)
-        updated = true
-        break
-      }
-    }
-
-    if (updated) {
-      addLog("info", `DOM Age Updated: ${newText}`, null, "CONTENT")
-    }
-  } catch (e: any) {
-    addLog("error", "Failed to update age in DOM", { error: e.toString() }, "CONTENT")
-  }
-}
-
-/**
- * 検索一覧の年齢表示を実年齢に書き換え
- */
-function updateSearchListAges() {
-  if (searchUserAgeMap.size === 0) return
-
-  const ageRangePattern = /\d{2}代(?:前半|半ば|後半)|10代後半|60代以上/
-  const links = document.querySelectorAll<HTMLAnchorElement>('a[href*="/user/show/"]')
-
-  for (const link of links) {
-    const match = link.getAttribute("href")?.match(/\/user\/show\/(\d+)/)
-    if (!match) continue
-
-    const userId = match[1]
-    const age = searchUserAgeMap.get(userId)
-    if (age === undefined) continue
-
-    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const node = walker.currentNode
-      const text = node.textContent || ""
-      if (ageRangePattern.test(text)) {
-        const newText = text.replace(ageRangePattern, `${age}歳`)
-        if (node.textContent !== newText) {
-          node.textContent = newText
-        }
-        break
-      }
-    }
-  }
-}
 
 /**
  * APIインターセプターからのメッセージを処理
@@ -131,33 +44,9 @@ window.addEventListener("message", async (event) => {
     }
   }
 
-  // 相手のプロフィール情報
+  // 相手のプロフィール情報（生成ボタン用にキャッシュ）
   if (url.includes("/api/user/show/") || url.includes("/api/user/service/show/")) {
     sessionStorage.setItem("luna_last_viewed_user", JSON.stringify(data))
-    const targetData = data.user || data.profile || data
-
-    const requestId = getUserIdFromUrl(url)
-    const dataId = targetData.id || targetData.user_id
-    const id = requestId || (dataId ? String(dataId) : null)
-
-    if (targetData?.age && id) {
-      lastTargetUser = { id, age: targetData.age }
-      updateAgeInDOM()
-    }
-  }
-
-  // 検索一覧のユーザー年齢データ
-  if (url.includes("/api/v2/search")) {
-    const users = Array.isArray(data) ? data : (data.users || data.data || [])
-    if (Array.isArray(users)) {
-      for (const user of users) {
-        if (user.id && user.age) {
-          searchUserAgeMap.set(String(user.id), user.age)
-        }
-      }
-      updateSearchListAges()
-      addLog("info", `Search ages cached: ${users.length} users`, null, "CONTENT")
-    }
   }
 
   // メッセージリスト（会話履歴 + 相手情報）
@@ -223,8 +112,6 @@ function processDom() {
     lastUrl = location.href
   }
 
-  updateAgeInDOM()
-  updateSearchListAges()
   injectButtons()
 }
 
