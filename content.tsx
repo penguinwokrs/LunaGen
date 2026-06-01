@@ -24,6 +24,9 @@ const searchUserAgeMap: Map<string, number | string> = new Map()
 function updateAgeInDOM() {
   if (!lastTargetUser) return
 
+  // プロフィール詳細ページ以外では全 div 走査をしない(負荷削減)
+  if (!/\/user\/(?:service\/)?show\/\d+/.test(location.pathname)) return
+
   const currentUserId = getUserIdFromUrl(location.pathname)
   if (currentUserId && lastTargetUser.id !== currentUserId) {
     return
@@ -186,43 +189,66 @@ window.addEventListener("message", async (event) => {
 })
 
 /**
- * 監視とボタン注入
+ * 対象ページの textarea に生成ボタンを注入する
  */
-function initObserver() {
-  const observer = new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href
-    }
+function injectButtons() {
+  // 相手のプロフィールページ または メッセージページ である場合のみボタンを挿入
+  const isTargetPage =
+    location.pathname.includes("/user/show/") ||
+    location.pathname.includes("/user/service/show/") ||
+    location.href.includes("/message") ||
+    location.href.includes("/matching")
 
-    updateAgeInDOM()
-    updateSearchListAges()
+  if (!isTargetPage) return
 
-    // 相手のプロフィールページ または メッセージページ である場合のみボタンを挿入
-    const isTargetPage =
-      location.pathname.includes("/user/show/") ||
-      location.pathname.includes("/user/service/show/") ||
-      location.href.includes("/message") ||
-      location.href.includes("/matching")
+  const textareas = document.querySelectorAll("textarea")
+  textareas.forEach((textarea) => {
+    if (textarea.dataset.lunaAiInjected === "true") return
+    textarea.dataset.lunaAiInjected = "true"
 
-    if (isTargetPage) {
-      const textareas = document.querySelectorAll("textarea")
-      textareas.forEach((textarea) => {
-        if (textarea.dataset.lunaAiInjected === "true") return
-        textarea.dataset.lunaAiInjected = "true"
-
-        const container = document.createElement("div")
-        // 親要素がflexの場合など崩れを防ぐため、textareaの直後に挿入するように変更検討
-        // ただし既存実装(parentElement.appendChild)で動くなら維持。
-        // リクエストのHTMLを見る限りフォーム直下なのでappendでも大丈夫そうだが、
-        // 念のためスタイルを当てるか、確実に表示されるようにする
-        textarea.parentElement?.appendChild(container)
-        const root = createRoot(container)
-        root.render(<GenerateButton textarea={textarea} />)
-      })
-    }
+    const container = document.createElement("div")
+    textarea.parentElement?.appendChild(container)
+    const root = createRoot(container)
+    root.render(<GenerateButton textarea={textarea} />)
   })
+}
 
+/**
+ * DOM変化に応じた処理をまとめて実行する。
+ * 各処理は冪等(同じ結果なら書き込まない)なので、自身の書き込みで
+ * 無限ループにはならない。
+ */
+function processDom() {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href
+  }
+
+  updateAgeInDOM()
+  updateSearchListAges()
+  injectButtons()
+}
+
+/**
+ * 監視とボタン注入。
+ *
+ * SPA は短時間に大量の mutation を発火させるため、コールバックを
+ * debounce(150ms)で集約し、メインスレッドの占有を防ぐ。以前は
+ * mutation ごとに全文書を走査していて重い画面でフリーズしていた。
+ */
+let processTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleProcess() {
+  if (processTimer !== null) return
+  processTimer = setTimeout(() => {
+    processTimer = null
+    processDom()
+  }, 150)
+}
+
+function initObserver() {
+  const observer = new MutationObserver(scheduleProcess)
   observer.observe(document.body, { childList: true, subtree: true })
+  // 初回は mutation が無くても処理する(既に存在する textarea 対応)
+  processDom()
 }
 
 // 実行開始
