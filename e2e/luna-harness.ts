@@ -24,9 +24,11 @@ const PROFILE_PATH = `/user/show/${TARGET_USER_ID}`
 /** モック AI が返す固定メッセージ(これらと textarea の値が一致するか検証する) */
 export const NORMAL_MESSAGE =
   "はじめまして、テスト初回メッセージです。プロフィール拝見しました、よろしくお願いします！"
+// プレミアムは 400〜500 文字想定。background のプレミアム再生成
+// (400〜500 文字外で1回リトライ)が走らない代表的な長さ(約451文字)にする。
 export const PREMIUM_MESSAGE =
   "プレミアム用テストメッセージです。" +
-  "プロフィールを拝見して、価値観や好みがとても近いと感じました。".repeat(6)
+  "プロフィールを拝見して、価値観や好みがとても近いと感じました。".repeat(14)
 
 /** シードする相手プロフィール(extractProfileFromJSON が10文字超のテキストを作れる形) */
 const DEFAULT_TARGET = {

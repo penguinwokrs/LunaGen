@@ -1,6 +1,6 @@
 import type { PlasmoCSConfig } from "plasmo"
 import { Storage } from "@plasmohq/storage"
-import { createRoot } from "react-dom/client"
+import { createRoot, type Root } from "react-dom/client"
 
 import { GenerateButton } from "./components/Content/GenerateButton"
 import { addLog } from "./utils/logger"
@@ -11,7 +11,6 @@ export const config: PlasmoCSConfig = {
 }
 
 const storage = new Storage({ area: "local" })
-let lastUrl = location.href
 
 /**
  * APIインターセプターからのメッセージを処理
@@ -77,6 +76,13 @@ window.addEventListener("message", async (event) => {
   }
 })
 
+// 注入済みボタンの React root を textarea ごとに保持し、SPA 遷移で
+// textarea が DOM から外れたら unmount してリークを防ぐ
+const injectedButtons = new Map<
+  HTMLTextAreaElement,
+  { root: Root; container: HTMLElement }
+>()
+
 /**
  * 対象ページの textarea に生成ボタンを注入する
  */
@@ -85,8 +91,7 @@ function injectButtons() {
   const isTargetPage =
     location.pathname.includes("/user/show/") ||
     location.pathname.includes("/user/service/show/") ||
-    location.href.includes("/message") ||
-    location.href.includes("/matching")
+    location.href.includes("/message")
 
   if (!isTargetPage) return
 
@@ -99,7 +104,21 @@ function injectButtons() {
     textarea.parentElement?.appendChild(container)
     const root = createRoot(container)
     root.render(<GenerateButton textarea={textarea} />)
+    injectedButtons.set(textarea, { root, container })
   })
+}
+
+/**
+ * DOM から外れた textarea のボタンを unmount して後始末する
+ */
+function cleanupDetachedButtons() {
+  for (const [textarea, { root, container }] of injectedButtons) {
+    if (!textarea.isConnected) {
+      root.unmount()
+      container.remove()
+      injectedButtons.delete(textarea)
+    }
+  }
 }
 
 /**
@@ -108,10 +127,7 @@ function injectButtons() {
  * 無限ループにはならない。
  */
 function processDom() {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href
-  }
-
+  cleanupDetachedButtons()
   injectButtons()
 }
 
