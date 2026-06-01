@@ -7,7 +7,13 @@
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
-    "package": "plasmo package"
+    "package": "plasmo package",
+    "e2e": "playwright test",
+    "e2e:headed": "HEADED=1 playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "e2e:login": "playwright codegen --channel=chromium --user-data-dir=e2e/.profile https://luna-matching.com/",
+    "e2e:codegen": "playwright codegen --channel=chromium https://luna-matching.com/"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.43",
@@ -21,6 +27,7 @@
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
+    "@playwright/test": "^1.60.0",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
     "@types/chrome": "0.0.258",

@@ -5,7 +5,6 @@
 /node_modules
 /.pnp
 .pnp.js
-e2e/__pycache__/
 
 # testing
 /coverage
@@ -34,6 +33,14 @@ dist/
 
 # typescript
 .tsbuildinfo
+tsconfig.tsbuildinfo
 
 # claude
 .claude/settings.local.json
+
+# playwright
+/test-results
+/playwright-report
+/playwright/.cache
+e2e/.profile
+e2e/.auth

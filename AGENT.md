@@ -45,6 +45,14 @@ LunaGenは、Plasmo Frameworkを使用したManifest V3準拠のChrome拡張機�
 - **メッセージ注入**: `logic/content-logic.ts` の `insertText` を使用し、React/Vueのイベントを発火させる。
 - **アイコン**: `assets/icon.png` を基に自動生成。
 
+## 🧪 テスト
+- **ユニット**: Vitest (`*.test.tsx`)。`pnpm exec vitest`。
+- **E2E / ブラウザ操作**: Playwright (`@playwright/test`)。`e2e/` 配下。
+  - `pnpm build` 済みの `build/chrome-mv3-prod` を persistent context でロードする。
+  - `pnpm e2e` で実行。詳細は `e2e/README.md`。
+  - luna-matching.com のログインは `pnpm e2e:login` でプロファイルを作り、
+    `E2E_USER_DATA_DIR=e2e/.profile` で再利用する。
+
 ## 📈 今後の拡張予定
 - メッセージ送信後の自動チャットログ記録。
 - 生成メッセージの「トーン」選択機能。
