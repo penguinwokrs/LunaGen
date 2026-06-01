@@ -12,6 +12,7 @@
     "e2e:headed": "HEADED=1 playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:report": "playwright show-report",
+    "e2e:harness": "PAUSE=1 HEADED=1 playwright test generate-button.spec.ts -g 手動 --headed",
     "e2e:login": "playwright codegen --channel=chromium --user-data-dir=e2e/.profile https://luna-matching.com/",
     "e2e:codegen": "playwright codegen --channel=chromium https://luna-matching.com/"
   },

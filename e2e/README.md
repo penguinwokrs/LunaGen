@@ -28,6 +28,33 @@ pnpm e2e:report     # 直近のレポートを表示
 | `fixtures.ts` | 拡張をロードした persistent context と `extensionId` を提供 |
 | `extension.spec.ts` | 拡張のロード/オプション/ポップアップ確認(ログイン不要) |
 | `luna-login.spec.ts` | luna-matching.com のログイン依存テスト |
+| `luna-harness.ts` | **ログイン不要・AI課金ゼロ**でボタンを動かすモックハーネス |
+| `generate-button.spec.ts` | 生成ボタンの表示 + 押下後メッセージ挿入の検証 |
+
+## メッセージ生成ボタンの検証(ログイン不要・AI課金ゼロ)
+
+`generate-button.spec.ts` は実ログインも実 AI 呼び出しもせずにボタンを検証する。
+`luna-harness.ts` が以下をモックする:
+
+- luna-matching.com を偽プロフィールページに差し替え(content script は本物が注入される)
+- 自分/相手プロフィールを `chrome.storage` / `sessionStorage` に直接シード
+  → 毎回の実プロフィール解析が不要
+- background が叩く Gemini API(`generativelanguage.googleapis.com`)を固定文に差し替え
+  → **実 AI 呼び出し・課金が一切発生しない**
+
+```bash
+pnpm e2e generate-button     # ボタン表示・通常/プレミアム生成を検証
+```
+
+### 手動で動きを見る
+
+ブラウザを開いたまま止めて、ボタン押下→メッセージ挿入を目視確認できる:
+
+```bash
+pnpm e2e:harness    # PAUSE=1 HEADED=1。Playwright Inspector で停止する
+```
+
+(WSL など GUI が無い環境では headed 表示に X サーバ/WSLg が必要。自動検証は headless で動く)
 
 拡張(MV3)は通常の `newContext` では読めないため、`launchPersistentContext`
 + `--load-extension` でロードしている(`fixtures.ts`)。
