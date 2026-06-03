@@ -37,6 +37,9 @@ test.describe("メッセージ生成ボタン", () => {
     const prompt = harness.lastPrompt()
     expect(prompt).toContain("テスト相手")
     expect(prompt).toContain("映画と旅行")
+    // 双方向の需給マッチ分析が注入され、噛み合う軸が含まれている
+    expect(prompt).toContain("# 需給マッチ分析")
+    expect(prompt).toContain("年齢")
     await page.close()
   })
 

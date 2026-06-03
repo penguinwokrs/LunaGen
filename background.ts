@@ -81,7 +81,7 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
   }
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, kinkHint, compatibilityHint }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, demandSupplyHint }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
   let promptTemplate = ""
@@ -102,11 +102,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     } else {
       prompt += `\n\n# 文字数制約（最重要）\n${premiumLimit}`
     }
-    // Expand content rules: touch more topics to naturally fill 500 chars
-    prompt = prompt.replace(
-      "詰め込みすぎない。A・Bそれぞれ1点ずつ、計2点が理想",
-      "A・Bそれぞれ2〜3点ずつ触れ、各点に自分の具体的な体験やエピソードを交えて深く掘り下げる。4〜5段落で構成し、各段落に十分な厚みを持たせること"
-    )
+    // Expand content: cover more matching points to naturally fill ~500 chars
+    prompt += "\n\n# 内容の厚み（プレミアム）\n噛み合う点を2〜3個まで取り上げ、各点に自分の具体的な体験やエピソードを添えて掘り下げること。"
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
 
@@ -126,25 +123,18 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   {
     const analysisSections: string[] = []
 
-    // 1. 嗜好マッチング分析（approach hint + compatibility hint）
-    if (kinkHint || compatibilityHint) {
-      let kinkSection = "# 嗜好マッチング分析\n"
-      if (kinkHint) {
-        kinkSection += `## アプローチ戦略\n${kinkHint}\n\n`
-      }
-      if (compatibilityHint) {
-        kinkSection += `## 相性の詳細\n${compatibilityHint}\n`
-      }
-      analysisSections.push(kinkSection.trimEnd())
+    // 1. 需給マッチ分析（双方向の噛み合い点）
+    if (demandSupplyHint) {
+      analysisSections.push(`# 需給マッチ分析\n${demandSupplyHint}`)
     }
 
-    // 2. 求める条件の強調（初回メッセージのみ）
+    // 2. 相手が自由記述した求める条件（補足。初回メッセージのみ）
     if (!chatHistory && targetProfile.includes("【求める条件】")) {
       const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
       if (reqMatch) {
         const reqText = reqMatch[1].trim()
         analysisSections.push(
-          `# 相手が明示している求める条件\n以下は相手が自ら書いた「求める条件」です。自分のプロフィールでこの条件に合致する要素を特定し、メッセージ内でさりげなく伝わるようにすること。\n\n${reqText}`
+          `# 補足: 相手が自由記述した求める条件\n以下は相手が自ら書いた「求める条件」です。需給マッチ分析と併せて参考にすること。\n\n${reqText}`
         )
       }
     }

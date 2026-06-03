@@ -3,7 +3,7 @@ import { Storage } from "@plasmohq/storage"
 import { getMyProfile, insertText, getPartnerProfile } from "../../logic/content-logic"
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
-import { generateApproachHint, generateCompatibilityHint } from "../../utils/kink-analysis"
+import { extractLookups, generateDemandSupplyHint } from "../../utils/demand-supply"
 import { getUserIdFromUrl } from "../../utils/url"
 
 const storage = new Storage({ area: "local" })
@@ -64,22 +64,20 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             }
 
             let targetName = ""
-            let kinkHint = ""
-            let compatibilityHint = ""
+            let demandSupplyHint = ""
             if (cachedTarget) {
                  const data = JSON.parse(cachedTarget)
                  const targetData = data.user || data.profile || data
                  targetName = targetData.name || targetData.nickname || ""
-                 kinkHint = generateApproachHint(targetData)
 
-                 // 自分のraw dataから相性ヒントを生成
+                 // 自分と相手のraw dataから双方向の需給マッチを生成
                  const myRawJson = await storage.get("myProfileRaw")
                  if (myRawJson) {
                      try {
                          const myRawData = JSON.parse(myRawJson as string)
-                         compatibilityHint = generateCompatibilityHint(myRawData, targetData)
+                         demandSupplyHint = generateDemandSupplyHint(myRawData, targetData, extractLookups(data))
                      } catch (e) {
-                         await addLog("warn", "Failed to parse myProfileRaw for compatibility", null, "CONTENT")
+                         await addLog("warn", "Failed to parse myProfileRaw for demand-supply", null, "CONTENT")
                      }
                  }
             }
@@ -145,8 +143,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 targetName: targetName,
                 chatHistory: chatHistory,
                 isPremium: isPremium,
-                kinkHint: kinkHint,
-                compatibilityHint: compatibilityHint
+                demandSupplyHint: demandSupplyHint
             })
 
             if (response && response.error) {

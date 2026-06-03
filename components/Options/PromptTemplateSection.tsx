@@ -95,7 +95,7 @@ export const PromptTemplateSection = ({
                         <li><strong>NGなこと・拒否</strong> — 拒否事項</li>
                         <li><strong>嗜好分析</strong> — タイプ傾向・嗜好スコア・強い傾向（q_*値から自動算出）</li>
                     </ul>
-                    さらに嗜好分析の結果に基づき、<strong>「相手の嗜好に基づくアプローチ戦略」</strong>がプロンプトに自動注入されます。
+                    さらに自分と相手のプロフィールから、<strong>「需給マッチ分析」（関係目的・役割・生活条件・嗜好の4軸で、双方向に噛み合う点を強い順に抽出）</strong>がプロンプトに自動注入されます。
                 </div>
             </details>
 

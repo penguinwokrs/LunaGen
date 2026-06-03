@@ -130,6 +130,9 @@ export function formatKinkSection(data: any): string {
 /**
  * プロンプトに注入するアプローチ戦略ヒント
  * 置換ルールで消えない安全な表現を使用
+ *
+ * @deprecated 需給マッチ分析（utils/demand-supply.ts の generateDemandSupplyHint）に統合。
+ * 現在メッセージ生成からは呼ばれていない。analyzeKinkType/formatKinkSection は引き続き利用。
  */
 export function generateApproachHint(data: any): string {
   const analysis = analyzeKinkType(data)
@@ -155,6 +158,9 @@ export function generateApproachHint(data: any): string {
 /**
  * 自分と相手の嗜好データから詳細な相性分析を生成
  * プロンプトの「嗜好マッチング分析」セクションとして注入される
+ *
+ * @deprecated 需給マッチ分析（utils/demand-supply.ts の generateDemandSupplyHint）に統合。
+ * 現在メッセージ生成からは呼ばれていない。
  */
 export function generateCompatibilityHint(myData: any, targetData: any): string {
   const myAnalysis = analyzeKinkType(myData)

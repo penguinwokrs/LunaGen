@@ -30,17 +30,46 @@ export const PREMIUM_MESSAGE =
   "プレミアム用テストメッセージです。" +
   "プロフィールを拝見して、価値観や好みがとても近いと感じました。".repeat(14)
 
-/** シードする相手プロフィール(extractProfileFromJSON が10文字超のテキストを作れる形) */
+/** シードする相手プロフィール(extractProfileFromJSON 用テキスト + 需給マッチ用の構造化フィールド) */
 const DEFAULT_TARGET = {
   id: TARGET_USER_ID,
   name: "テスト相手",
   age: 28,
+  area: "13",
+  body_type: "3",
+  my_type: "J", // sub-masochist
+  q_sex: 4,
+  q_pleasure: 4,
+  relationship_1: true,
+  conditions_age_from: 30,
+  conditions_age_to: 40,
+  conditions_area: ["13"],
   profile: "よろしくお願いします。アウトドアと料理、映画が好きです。"
 }
 
-/** シードする自分プロフィールのテキスト */
+/** 相手レスポンス全体に含まれる *_list ルックアップ表（地域コード→表示名） */
+const TARGET_LOOKUPS = {
+  area_list: { "13": "東京都" }
+}
+
+/** シードする自分プロフィール(表示用テキスト) */
 const MY_PROFILE_TEXT =
-  "名前: テスト自分\n年齢: 30歳\n\n【自己紹介】\n映画と旅行が好きです。よろしくお願いします。\n"
+  "名前: テスト自分\n年齢: 33歳\n\n【自己紹介】\n映画と旅行が好きです。よろしくお願いします。\n"
+
+/** シードする自分の生JSON(双方向需給マッチ用) */
+const MY_RAW = {
+  age: 33,
+  area: "13",
+  body_type: "3",
+  my_type: "A", // dom-sadist（相手 sub と相補）
+  q_sex: 5,
+  q_pleasure: 5,
+  relationship_1: true,
+  conditions_age_from: 25,
+  conditions_age_to: 40,
+  conditions_area: ["13"],
+  conditions_body: ["3"]
+}
 
 /** @plasmohq/storage 互換のシリアライズ(set は JSON.stringify で保存される) */
 function plasmoSerialize(obj: Record<string, unknown>) {
@@ -167,7 +196,7 @@ export const test = extensionTest.extend<{ harness: Harness }>({
       {
         local: plasmoSerialize({
           myProfile: MY_PROFILE_TEXT,
-          myProfileRaw: "{}",
+          myProfileRaw: JSON.stringify(MY_RAW),
           aiProvider: "gemini",
           isDebugEnabled: true
         }),
@@ -181,13 +210,16 @@ export const test = extensionTest.extend<{ harness: Harness }>({
     const gotoProfile: Harness["gotoProfile"] = async (page, opts) => {
       const path = opts?.premium ? `${PROFILE_PATH}?premium=1` : PROFILE_PATH
       await page.goto(`https://luna-matching.com${path}`)
-      // 相手プロフィールを sessionStorage にシード(ボタンが click 時に読む)
-      await page.evaluate((target) => {
-        sessionStorage.setItem(
-          "luna_last_viewed_user",
-          JSON.stringify({ user: target })
-        )
-      }, DEFAULT_TARGET)
+      // 相手プロフィール + *_list ルックアップを sessionStorage にシード(ボタンが click 時に読む)
+      await page.evaluate(
+        ({ target, lookups }) => {
+          sessionStorage.setItem(
+            "luna_last_viewed_user",
+            JSON.stringify({ user: target, ...lookups })
+          )
+        },
+        { target: DEFAULT_TARGET, lookups: TARGET_LOOKUPS }
+      )
     }
 
     await use({
