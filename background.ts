@@ -81,6 +81,18 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
   }
 }
 
+/** 上限 cap を超えない範囲で最も cap に近い候補を選ぶ。両方超過なら短い方を選ぶ。 */
+function pickNearCap(a: { text: string }, b: { text: string }, cap: number) {
+  const aLen = a.text?.length ?? 0
+  const bLen = b.text?.length ?? 0
+  const aOk = aLen <= cap
+  const bOk = bLen <= cap
+  if (aOk && bOk) return aLen >= bLen ? a : b
+  if (aOk) return a
+  if (bOk) return b
+  return aLen <= bLen ? a : b
+}
+
 async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, demandSupplyHint }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
@@ -95,15 +107,15 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   let prompt = promptTemplate
 
   if (isPremium) {
-    const premiumLimit = "文字数は句読点・記号・空白・改行すべて含めて合計480〜500文字（厳守。500文字を超えたら失格、450文字未満も失格）"
+    const premiumLimit = "文字数は句読点・記号・空白・改行すべて含めて合計490〜500文字（厳守。500文字を超えたら失格、480文字未満も失格。上限500を超えない範囲で、可能な限り500文字に近づけること）"
     const normalLimit = "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守。200文字を1文字でも超えたら失格）"
     if (prompt.includes(normalLimit)) {
       prompt = prompt.replace(normalLimit, premiumLimit)
     } else {
       prompt += `\n\n# 文字数制約（最重要）\n${premiumLimit}`
     }
-    // Expand content: cover more matching points to naturally fill ~500 chars
-    prompt += "\n\n# 内容の厚み（プレミアム）\n噛み合う点を2〜3個まで取り上げ、各点に自分の具体的な体験やエピソードを添えて掘り下げること。"
+    // Expand content: cover more matching points to naturally fill close to 500 chars
+    prompt += "\n\n# 内容の厚み（プレミアム）\n噛み合う点を2〜3個取り上げ、各点に自分の具体的な体験やエピソードを添えて掘り下げ、文字数が500に届く手前まで厚く書くこと。"
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
 
@@ -213,15 +225,24 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   try {
     let result = await generateOnce(prompt)
 
-    // Premium: retry once if character count is way off (outside 400-500)
+    // Premium: 上限500を超えない範囲で、できるだけ500文字に近づける。
+    // 受理帯(490〜500)に入るまで最大2回リトライし、上限超過しない最良候補を採用する。
     if (isPremium && result.text) {
-      const len = result.text.length
-      if (len < 400 || len > 500) {
-        const retryPrompt = len < 400
-          ? `${prompt}\n\n【再生成指示】前回の出力は${len}文字で短すぎました。480〜500文字になるよう、話題を追加し、各話題にエピソードを加えてください。`
-          : `${prompt}\n\n【再生成指示】前回の出力は${len}文字で長すぎました。480〜500文字に収まるよう、冗長な部分を削ってください。`
-        await logBG("info", `Premium retry: ${len} chars → retrying for 480-500 range`)
-        result = await generateOnce(retryPrompt)
+      const CAP = 500
+      const FLOOR = 490
+      const MAX_RETRY = 2
+      const inBand = (n: number) => n >= FLOOR && n <= CAP
+
+      let attempt = 0
+      while (!inBand(result.text.length) && attempt < MAX_RETRY) {
+        attempt++
+        const len = result.text.length
+        const retryPrompt = len < FLOOR
+          ? `${prompt}\n\n【再生成指示】前回は${len}文字で、上限500に対して短すぎます。話題やエピソードを増やし、上限500を超えない範囲で${FLOOR}〜${CAP}文字（できるだけ500に近づける）にしてください。`
+          : `${prompt}\n\n【再生成指示】前回は${len}文字で上限500を超えています。内容を保ちつつ${FLOOR}〜${CAP}文字に収めてください。`
+        await logBG("info", `Premium retry ${attempt}: ${len} chars → aiming ${FLOOR}-${CAP}`)
+        const next = await generateOnce(retryPrompt)
+        result = pickNearCap(result, next, CAP)
       }
       await logBG("info", `Premium final length: ${result.text.length} chars`)
     }
