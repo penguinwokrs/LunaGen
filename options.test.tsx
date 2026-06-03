@@ -1,70 +1,63 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
-import { vi, describe, it, expect, beforeEach } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
 import Options from "./options"
 
-// Fetchのモック
+// fetch をモック（プロフィール取得は is_auth → get/me の2段）
 global.fetch = vi.fn()
 
 describe("Options Component", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // ストレージのモック（メモリ）をリセットする必要があるが、
-    // 今回の簡易モックではsetup-tests側でMapを使っているので
-    // 厳密にはリセットされていない。
-    // コンポーネントが再レンダリングされるときに初期値が使われる挙動を
-    // 正しくテストするには、モックの実装をもう少し洗練させる必要がありますが、
-    // まずは基本的な動作確認を行います。
   })
 
   it("renders the settings page", () => {
     render(<Options />)
-    expect(screen.getByText("Luna Extension 設定")).toBeTruthy()
+    expect(screen.getByText("LunaGen 設定")).toBeTruthy()
     expect(screen.getByText("0. 自分のプロフィール")).toBeTruthy()
   })
 
   it("handles profile fetch success", async () => {
-    // Fetchの成功レスポンスをモック
-    const mockProfileText = "これは私のテストプロフィールです。\n趣味はプログラミングです。"
-    const mockHtml = `<html><body>${mockProfileText}</body></html>`
-    
-    ;(global.fetch as any).mockResolvedValue({
-      ok: true,
-      text: async () => mockHtml,
-      status: 200
+    ;(global.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/user/is_auth")) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ is_atuh: true }) })
+      }
+      if (url.includes("/api/user/get/me")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            name: "テスト太郎",
+            profile: "これは私のテストプロフィールです。趣味はプログラミングです。"
+          })
+        })
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
     })
 
     render(<Options />)
 
-    // 更新ボタンを探してクリック
-    // ボタンは "🔄" または title="プロフィールをLunaから取得して更新"
     const updateButton = screen.getByTitle("プロフィールをLunaから取得して更新")
-    expect(updateButton).toBeTruthy()
-    
     fireEvent.click(updateButton)
 
-    // ローディング状態（スピン）になるか（実装上、一瞬で終わる可能性もあるが）
-    // waitForで完了後の状態を待つ
-    
+    // 成功トースト（絵文字付きで描画されるため部分一致で検証）
     await waitFor(() => {
-      // 成功トーストが表示されるか
-      expect(screen.getByText("プロフィールを更新しました！")).toBeTruthy()
+      expect(screen.getByText(/プロフィールを更新しました/)).toBeTruthy()
     })
 
-    // Fetchが正しいURLで呼ばれたか
-    expect(global.fetch).toHaveBeenCalledWith("https://luna-matching.com/profile")
+    // get/me に正しいURLで問い合わせている
+    expect(global.fetch).toHaveBeenCalledWith("https://luna-matching.com/api/user/get/me")
   })
 
   it("handles profile fetch failure", async () => {
-    // Fetchの失敗レスポンスをモック
     ;(global.fetch as any).mockRejectedValue(new Error("Network Error"))
 
     render(<Options />)
 
-    const updateButton = screen.getByTitle("プロフィールをLunaから取得して更新")
-    fireEvent.click(updateButton)
+    fireEvent.click(screen.getByTitle("プロフィールをLunaから取得して更新"))
 
     await waitFor(() => {
-      expect(screen.getByText("Network Error")).toBeTruthy()
+      expect(screen.getByText(/Network Error/)).toBeTruthy()
     })
   })
 })

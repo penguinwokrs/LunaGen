@@ -69,7 +69,7 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
         const { text } = await generateText({
           model: openai(model),
           prompt: testPrompt,
-          maxTokens: 10,
+          maxOutputTokens: 10,
         })
         return { success: true, text: text || "" }
       }
@@ -246,15 +246,18 @@ async function generateWithGemini(prompt: string, model: string) {
   while (retries <= maxRetries) {
     try {
       const { text, finishReason } = await generateText({
-        model: google(model, {
-          safetySettings: [
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-          ],
-        }),
+        model: google(model),
         prompt,
+        providerOptions: {
+          google: {
+            safetySettings: [
+              { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+              { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+              { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+              { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+            ],
+          },
+        },
       })
 
       if (!text) {
@@ -292,7 +295,7 @@ async function generateWithOpenAI(prompt: string, model: string, isPremium = fal
     model: openai(model),
     system: "You are a helpful assistant.",
     prompt,
-    maxTokens: isPremium ? 2000 : 500,
+    maxOutputTokens: isPremium ? 2000 : 500,
   })
 
   return { text: text || "" }
