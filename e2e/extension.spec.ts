@@ -27,4 +27,22 @@ test.describe("拡張のロード", () => {
     await expect(page.locator("body")).toBeVisible()
     await page.close()
   })
+
+  test("ポップアップの「設定画面を開く」でオプションページが開く", async ({
+    context,
+    extensionId
+  }) => {
+    const page = await context.newPage()
+    await page.goto(`chrome-extension://${extensionId}/popup.html`)
+
+    // openOptionsPage に依存せず tabs.create フォールバックで新規タブが開くこと
+    const opened = context.waitForEvent("page")
+    await page.getByRole("button", { name: "設定画面を開く" }).click()
+    const optionsPage = await opened
+    await optionsPage.waitForLoadState()
+    expect(optionsPage.url()).toContain("options.html")
+
+    await optionsPage.close()
+    await page.close()
+  })
 })

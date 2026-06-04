@@ -1,6 +1,24 @@
-import { useState } from "react"
-
 function IndexPopup() {
+  // 設定画面を開く。chrome.runtime.openOptionsPage() は一部ブラウザ
+  // (Edge Canary の Android 拡張対応など)で無反応なため、tabs.create →
+  // window.open の順にフォールバックして確実にタブを開く。
+  const openSettings = () => {
+    const url = chrome.runtime.getURL("options.html")
+    try {
+      if (chrome.tabs?.create) {
+        chrome.tabs.create({ url })
+        return
+      }
+    } catch {}
+    try {
+      if (chrome.runtime?.openOptionsPage) {
+        chrome.runtime.openOptionsPage()
+        return
+      }
+    } catch {}
+    window.open(url, "_blank")
+  }
+
   return (
     <div
       style={{
@@ -14,7 +32,7 @@ function IndexPopup() {
       </p>
 
       <button
-        onClick={() => chrome.runtime.openOptionsPage()}
+        onClick={openSettings}
         style={{
           width: "100%",
           padding: "10px",
