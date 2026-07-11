@@ -2,7 +2,7 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, FOCUS_TOPIC_INSTRUCTION, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
 import { addLog } from "./utils/logger"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -93,7 +93,7 @@ function pickNearCap(a: { text: string }, b: { text: string }, cap: number) {
   return aLen <= bLen ? a : b
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, demandSupplyHint }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, demandSupplyHint, focusTopic }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
   let promptTemplate = ""
@@ -134,6 +134,12 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   // Build structured analysis section before target profile
   {
     const analysisSections: string[] = []
+
+    // 0. ユーザーがメッセージ入力欄に書いた優先話題（最優先で先頭に置く）
+    if (focusTopic && String(focusTopic).trim()) {
+      analysisSections.push(FOCUS_TOPIC_INSTRUCTION.replace("{focus_topic}", String(focusTopic).trim()))
+      await logBG("info", "Focus topic supplied from message box", { focusTopic: String(focusTopic).trim() })
+    }
 
     // 1. 需給マッチ分析（双方向の噛み合い点）
     if (demandSupplyHint) {

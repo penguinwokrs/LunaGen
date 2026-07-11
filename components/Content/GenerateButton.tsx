@@ -35,7 +35,11 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
         setLoading(true)
         setError(false)
 
-        await addLog("info", "AI Generate Button Clicked", null, "CONTENT")
+        // メッセージ入力欄に書かれた内容を「優先して掘り下げたい話題」として拾う。
+        // 生成結果で上書きされる前に読み取っておく。
+        const focusTopic = textarea.value.trim()
+
+        await addLog("info", "AI Generate Button Clicked", { hasFocusTopic: !!focusTopic }, "CONTENT")
 
         try {
             // 1. Get My Profile
@@ -143,7 +147,8 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 targetName: targetName,
                 chatHistory: chatHistory,
                 isPremium: isPremium,
-                demandSupplyHint: demandSupplyHint
+                demandSupplyHint: demandSupplyHint,
+                focusTopic: focusTopic
             })
 
             if (response && response.error) {
@@ -165,26 +170,59 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
         }
     }
 
+    const handleClear = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (loading) return
+        // 各種イベントを発火させてサイト側の状態も空にする
+        insertText(textarea, "")
+        setError(false)
+    }
+
     return (
         <div style={{ marginTop: "8px" }}>
-            <button
-                onClick={handleClick}
-                disabled={loading}
-                style={{
-                    padding: "6px 12px",
-                    backgroundColor: loading ? "#ccc" : (error ? "#f44336" : "#e91e63"),
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    fontSize: "12px",
-                    cursor: loading ? "not-allowed" : "pointer",
-                    fontWeight: "bold",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                    transition: "all 0.3s ease"
-                }}
-            >
-                {loading ? (slow ? "⌛ お待ち下さい..." : "🪄 AI生成中...") : (error ? "⚠️ エラー再試行" : "✨ AIでメッセージ生成")}
-            </button>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button
+                    onClick={handleClick}
+                    disabled={loading}
+                    title="入力欄の内容を優先話題として掘り下げてメッセージを生成"
+                    style={{
+                        padding: "6px 12px",
+                        backgroundColor: loading ? "#ccc" : (error ? "#f44336" : "#e91e63"),
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        fontWeight: "bold",
+                        whiteSpace: "nowrap",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                        transition: "all 0.3s ease"
+                    }}
+                >
+                    {loading ? (slow ? "⌛ お待ち下さい..." : "🪄 生成中...") : (error ? "⚠️ 再試行" : "AI")}
+                </button>
+                <button
+                    onClick={handleClear}
+                    disabled={loading}
+                    title="入力欄をクリア"
+                    style={{
+                        padding: "6px 12px",
+                        backgroundColor: "#9e9e9e",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        fontWeight: "bold",
+                        whiteSpace: "nowrap",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                        transition: "all 0.3s ease"
+                    }}
+                >
+                    クリア
+                </button>
+            </div>
             {error && !loading && (
                 <p style={{ color: "#f44336", fontSize: "10px", margin: "4px 0 0 4px", fontWeight: "bold" }}>
                     通信エラーが発生した可能性があります。

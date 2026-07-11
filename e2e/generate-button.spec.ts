@@ -7,7 +7,7 @@ import { expect, test } from "./luna-harness"
  * 手動で動きを見たいときは PAUSE=1 HEADED=1 で最後のテストを使う(e2e:harness)。
  */
 
-const BUTTON = "✨ AIでメッセージ生成"
+const BUTTON = "AI"
 
 test.describe("メッセージ生成ボタン", () => {
   test("プロフィールページにボタンが表示される", async ({ context, harness }) => {
