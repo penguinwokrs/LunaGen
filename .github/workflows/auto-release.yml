@@ -11,6 +11,10 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    # コミット件名/本文に [skip release] を含む push はリリースを切らない。
+    # push の HEAD コミットのメッセージを見るため、複数コミットを一度に push する
+    # 場合は最後のコミットに付けること。他のワークフロー(テスト等)は通常どおり動く。
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
     steps:
       - uses: actions/checkout@v6
         with:
