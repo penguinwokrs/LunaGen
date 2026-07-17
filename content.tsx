@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { GenerateButton } from "./components/Content/GenerateButton"
 import { addLog } from "./utils/logger"
 import { extractProfileFromJSON } from "./utils/profile"
+import { getThreadIdFromMessageListUrl } from "./utils/url"
 
 export const config: PlasmoCSConfig = {
   matches: ["https://*.luna-matching.com/*", "https://luna-matching.com/*"]
@@ -52,12 +53,16 @@ window.addEventListener("message", async (event) => {
   if (url.includes("/api/user/message/list/")) {
     const userInfo = data.user_info
     const messageList = data.message_list
+    const threadId = getThreadIdFromMessageListUrl(url)
 
     if (userInfo) {
-      // プロフィール情報のキャッシュ更新
+      // プロフィール情報のキャッシュ更新。
+      // user_info は id/name/profile 程度しか持たない薄い情報なので、
+      // これだけでは生成に足りないことがある（自己紹介が空の相手など）。
+      // 不足分は GenerateButton 側が user_info.id で本体を取り直す。
       sessionStorage.setItem(
         "luna_last_viewed_user",
-        JSON.stringify({ user: userInfo })
+        JSON.stringify({ user: userInfo, threadId })
       )
       addLog("info", "Partner Profile cached from Message List", null, "CONTENT")
     }

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { Storage } from "@plasmohq/storage"
-import { getMyProfile, insertText, getPartnerProfile } from "../../logic/content-logic"
+import { getMyProfile, insertText, getPartnerProfile, resolvePartnerUserId } from "../../logic/content-logic"
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
 import { extractLookups, generateDemandSupplyHint } from "../../utils/demand-supply"
-import { getUserIdFromUrl } from "../../utils/url"
+import { resolveCachedPartner } from "../../utils/partner"
+import { getThreadIdFromUrl, getUserIdFromUrl } from "../../utils/url"
 
 const storage = new Storage({ area: "local" })
 
@@ -46,69 +47,60 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             const myProfileText = await getMyProfile()
 
             // 2. Get Target Profile
-            let targetProfileText = ""
-            const cachedTarget = sessionStorage.getItem("luna_last_viewed_user")
+            const urlUserId = getUserIdFromUrl(location.href)
+            const threadId = getThreadIdFromUrl(location.href)
+            const isService = location.href.includes("/service/")
 
-            // Current User ID from URL
-            const currentUserId = getUserIdFromUrl(location.href)
+            const cached = resolveCachedPartner(
+                sessionStorage.getItem("luna_last_viewed_user"),
+                location.href
+            )
 
-            if (cachedTarget) {
-                const data = JSON.parse(cachedTarget)
+            let targetData: any = cached?.data ?? null
+            let targetRaw: any = cached?.raw ?? null
+            let targetProfileText = targetData ? extractProfileFromJSON(targetData, targetRaw) : ""
 
-                // Validate ID matches
-                const targetData = data.user || data.profile || data
-                const cachedId = targetData.id || targetData.user_id
+            // キャッシュが無い/薄い場合はプロフィール本体を取り直す。
+            // メッセージページで拾える user_info は id/name/自己紹介 程度しか無いため、
+            // 自己紹介が未記入の相手では必ずここに落ちてくる。
+            if (!targetProfileText || targetProfileText.length < 10) {
+                const partnerUserId =
+                    urlUserId ??
+                    cached?.userId ??
+                    (threadId ? await resolvePartnerUserId(threadId) : null)
 
-                if (currentUserId && cachedId && String(cachedId) !== String(currentUserId)) {
-                    await addLog("warn", "Cached profile ID mismatch", { cachedId, currentUserId }, "CONTENT")
-                    targetProfileText = "" // invalidate
-                } else {
-                    targetProfileText = extractProfileFromJSON(targetData, data)
-                }
-            }
-
-            let targetName = ""
-            let demandSupplyHint = ""
-            if (cachedTarget) {
-                 const data = JSON.parse(cachedTarget)
-                 const targetData = data.user || data.profile || data
-                 targetName = targetData.name || targetData.nickname || ""
-
-                 // 自分と相手のraw dataから双方向の需給マッチを生成
-                 const myRawJson = await storage.get("myProfileRaw")
-                 if (myRawJson) {
-                     try {
-                         const myRawData = JSON.parse(myRawJson as string)
-                         demandSupplyHint = generateDemandSupplyHint(myRawData, targetData, extractLookups(data))
-                     } catch (e) {
-                         await addLog("warn", "Failed to parse myProfileRaw for demand-supply", null, "CONTENT")
-                     }
-                 }
-            }
-
-            // Fallback: Fetch if missing or invalid
-            if ((!targetProfileText || targetProfileText.length < 10) && currentUserId) {
-                await addLog("info", "Attempting fallback fetch for partner profile", { currentUserId }, "CONTENT")
-                const isService = location.href.includes("/service/")
-                const fetchedText = await getPartnerProfile(currentUserId, isService)
-                if (fetchedText) {
-                    targetProfileText = fetchedText
-                    // Try to extract name from text if we don't have the object easily available from getPartnerProfile (which returns text)
-                    // But getPartnerProfile seems to just return text.
-                    // We might need to improve getPartnerProfile or just parse the text.
-                    // For now, let's rely on the text parsing
-                    const nameMatch = fetchedText.match(/名前: (.+)/)
-                    if (nameMatch) {
-                        targetName = nameMatch[1].trim()
+                if (partnerUserId) {
+                    await addLog("info", "Attempting fallback fetch for partner profile", { partnerUserId, threadId }, "CONTENT")
+                    const fetched = await getPartnerProfile(partnerUserId, isService, threadId)
+                    if (fetched?.text) {
+                        targetProfileText = fetched.text
+                        targetData = fetched.data
+                        targetRaw = fetched.raw
                     }
+                } else {
+                    await addLog("warn", "Could not determine partner user id", { url: location.href }, "CONTENT")
                 }
             }
 
             if (!targetProfileText || targetProfileText.length < 10) {
-                await addLog("error", "Target Profile not found in API cache", null, "CONTENT")
+                await addLog("error", "Target Profile not found", { threadId, urlUserId }, "CONTENT")
                 alert("相手のプロフィール情報の取得に失敗しました。ページを一度リロードしてから再度お試しください。")
                 setLoading(false)
                 return
+            }
+
+            const targetName = targetData?.name || targetData?.nickname || ""
+
+            // 自分と相手のraw dataから双方向の需給マッチを生成
+            let demandSupplyHint = ""
+            const myRawJson = await storage.get("myProfileRaw")
+            if (myRawJson && targetData) {
+                try {
+                    const myRawData = JSON.parse(myRawJson as string)
+                    demandSupplyHint = generateDemandSupplyHint(myRawData, targetData, extractLookups(targetRaw))
+                } catch (e) {
+                    await addLog("warn", "Failed to parse myProfileRaw for demand-supply", null, "CONTENT")
+                }
             }
 
             // 2.5 Get Chat History
