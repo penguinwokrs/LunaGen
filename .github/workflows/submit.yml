@@ -14,7 +14,7 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-
-      - uses: pnpm/action-setup@v4.4.0
+      - uses: pnpm/action-setup@v6
         with:
           version: 8
           run_install: true
@@ -28,6 +28,9 @@ jobs:
       - name: Package the extension into a zip artifact
         run: pnpm package
       - name: Browser Platform Publish
+        # 上流が浮動メジャータグ(v3)を publish していないため、例外的に v3.8.0 で固定する。
+        # @v3 は存在せずワークフローが壊れる。上流は node20 のままで、Node24強制の
+        # 非推奨警告はこちら側では解消できない。
         uses: PlasmoHQ/bpp@v3.8.0
         with:
           keys: ${{ secrets.SUBMIT_KEYS }}
