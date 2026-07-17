@@ -48,10 +48,51 @@ export async function getMyProfile() {
     }
 }
 
+export interface PartnerProfile {
+    /** 生成用に整形したプロフィールテキスト */
+    text: string
+    /** ユーザーオブジェクト */
+    data: any
+    /** レスポンス全体。age_list/area_list等のルックアップに使う */
+    raw: any
+}
+
 /**
- * 相手のプロフィールをIDで明示的に取得する
+ * メッセージスレッドIDから相手のユーザーIDを引く
+ *
+ * スレッドのURL(`/user/message/6173238`)の数値はスレッドIDであって
+ * ユーザーIDではないため、message/list の `user_info.id` を正とする。
  */
-export async function getPartnerProfile(userId: string, isService: boolean = false) {
+export async function resolvePartnerUserId(threadId: string): Promise<string | null> {
+    try {
+        const res = await fetch(`https://luna-matching.com/api/user/message/list/${threadId}`)
+        if (!res.ok) throw new Error("Fetch failed: " + res.status)
+
+        const data = await res.json()
+        const id = data?.user_info?.id
+        if (id === undefined || id === null) {
+            await addLog("warn", "message/list returned no user_info.id", { threadId }, "CONTENT")
+            return null
+        }
+        return String(id)
+    } catch (e: any) {
+        await addLog("error", "Failed to resolve partner user id from thread", { error: e.toString(), threadId }, "CONTENT")
+        return null
+    }
+}
+
+/**
+ * 相手のプロフィールをユーザーIDで明示的に取得する
+ *
+ * @param userId 相手のユーザーID（スレッドIDではない）
+ * @param isService サービス側のエンドポイントを使うか
+ * @param threadId メッセージページ由来なら、そのスレッドID。キャッシュの照合に使う
+ */
+export async function getPartnerProfile(
+    userId: string,
+    isService: boolean = false,
+    threadId: string | null = null
+): Promise<PartnerProfile | null> {
     try {
         const endpoint = isService
             ? `https://luna-matching.com/api/user/service/show/${userId}`
@@ -68,17 +109,22 @@ export async function getPartnerProfile(userId: string, isService: boolean = fal
             throw new Error("API returned empty data")
         }
 
-        // Cache this for next time
-        sessionStorage.setItem("luna_last_viewed_user", JSON.stringify(data))
-
         const targetData = data.user || data.profile || data.member || data
+
+        // 次回のためにキャッシュする。どのスレッドの相手かも一緒に残さないと
+        // 別スレッドに遷移したとき、この相手のものだと誤認してしまう。
+        sessionStorage.setItem(
+            "luna_last_viewed_user",
+            JSON.stringify(threadId ? { ...data, threadId } : data)
+        )
+
         const text = extractProfileFromJSON(targetData, data)
 
         if (!text || text.length < 10) {
             await addLog("warn", "Extracted partner profile is very short or empty", { text, data }, "CONTENT")
         }
 
-        return text
+        return { text, data: targetData, raw: data }
     } catch (e: any) {
         await addLog("error", "Failed to fetch partner profile", { error: e.toString(), userId }, "CONTENT")
         return null
