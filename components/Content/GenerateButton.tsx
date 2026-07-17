@@ -4,7 +4,7 @@ import { getMyProfile, insertText, getPartnerProfile, resolvePartnerUserId } fro
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
 import { extractLookups, generateDemandSupplyHint } from "../../utils/demand-supply"
-import { resolveCachedPartner } from "../../utils/partner"
+import { formatChatHistory, resolveCachedHistory, resolveCachedPartner } from "../../utils/partner"
 import { getThreadIdFromUrl, getUserIdFromUrl } from "../../utils/url"
 
 const storage = new Storage({ area: "local" })
@@ -109,22 +109,19 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             const isMessagePage = location.href.includes("/message/") || location.href.includes("/matching/")
 
             if (cachedHistory && isMessagePage) {
-                try {
-                    const historyData = JSON.parse(cachedHistory)
-                    const messages = historyData.messages || []
-                    const partnerId = historyData.partnerId
+                // 履歴もプロフィールと同様に相手が一致するか検証する。
+                // 検証しないとSPA遷移で別人の会話履歴を元に生成しかねない。
+                const partnerId = targetData?.id ?? targetData?.user_id
+                const history = resolveCachedHistory(
+                    cachedHistory,
+                    location.href,
+                    partnerId === undefined || partnerId === null ? null : String(partnerId)
+                )
 
-                    // Use last 15 messages
-                    const recentMessages = messages.slice(-15)
-                    chatHistory = recentMessages
-                        // biome-ignore lint/suspicious/noExplicitAny: Message type
-                        .map((m: any) => {
-                            const isPartner = String(m.user_id) === String(partnerId)
-                            return `${isPartner ? "Partner" : "Me"}: ${m.message}`
-                        })
-                        .join("\n")
-                } catch (e) {
-                    console.error("Failed to parse chat history", e)
+                if (history) {
+                    chatHistory = formatChatHistory(history.messages, history.partnerId)
+                } else {
+                    await addLog("warn", "Chat history cache did not match current partner; ignored", { partnerId, threadId }, "CONTENT")
                 }
             }
 

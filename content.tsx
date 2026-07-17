@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { GenerateButton } from "./components/Content/GenerateButton"
 import { addLog } from "./utils/logger"
 import { extractProfileFromJSON } from "./utils/profile"
+import { mergePartnerCache } from "./utils/partner"
 import { getThreadIdFromMessageListUrl } from "./utils/url"
 
 export const config: PlasmoCSConfig = {
@@ -62,7 +63,7 @@ window.addEventListener("message", async (event) => {
       // 不足分は GenerateButton 側が user_info.id で本体を取り直す。
       sessionStorage.setItem(
         "luna_last_viewed_user",
-        JSON.stringify({ user: userInfo, threadId })
+        mergePartnerCache(sessionStorage.getItem("luna_last_viewed_user"), userInfo, threadId)
       )
       addLog("info", "Partner Profile cached from Message List", null, "CONTENT")
     }
@@ -73,6 +74,7 @@ window.addEventListener("message", async (event) => {
         JSON.stringify({
           messages: messageList,
           partnerId: userInfo?.id,
+          threadId,
           cachedAt: new Date().toISOString()
         })
       )
