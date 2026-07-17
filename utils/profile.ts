@@ -10,8 +10,14 @@ import { formatKinkSection } from "./kink-analysis"
 export function extractProfileFromJSON(u: any, rawResponse?: any): string {
     if (!u) return ""
 
-    // Handle nested data if it exists
-    const data = u.user || u.profile || u.member || u
+    // ネストされたユーザーオブジェクトがあれば取り出す。
+    // ただし `profile` は自己紹介文（文字列）のフィールド名でもあるため、
+    // ネスト用のラッパーとして扱ってよいのは「オブジェクトの場合」だけ。
+    // ここで文字列の自己紹介を data に採用してしまうと、name/age 等を含む
+    // 本来のユーザーオブジェクトが失われ、抽出結果が自己紹介文だけに退化する。
+    const asObject = (v: any) =>
+        v && typeof v === "object" && !Array.isArray(v) ? v : null
+    const data = asObject(u.user) || asObject(u.profile) || asObject(u.member) || u
 
     // Lookup tables from the raw API response
     const ageList = rawResponse?.age_list
