@@ -3,6 +3,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
 import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, FOCUS_TOPIC_INSTRUCTION, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
+import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { addLog } from "./utils/logger"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -36,6 +37,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })
       .catch((err) => {
         logBG("error", "Test API Failed", { error: err.message })
+        sendResponse({ error: err.message })
+      })
+    return true
+  }
+
+  if (request.action === "generate_profile") {
+    logBG("info", `Profile generation requested: ${request.fieldType}/${request.taste}`)
+    handleGenerateProfile(request)
+      .then((res) => sendResponse(res))
+      .catch((err) => {
+        logBG("error", "Failed to generate profile", { error: err.message })
         sendResponse({ error: err.message })
       })
     return true
@@ -78,6 +90,32 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
     }
   } catch (e: any) {
     return { success: false, error: e.message }
+  }
+}
+
+/** 設定済みプロバイダで1回生成する（メッセージ/プロフィール共用） */
+async function generateWithConfiguredProvider(
+  prompt: string,
+  opts: { openaiMaxTokens?: number } = {}
+) {
+  const aiProvider = await storage.get("aiProvider") || "gemini"
+  switch (aiProvider) {
+    case "ollama": {
+      const model = await storage.get("ollamaModel") || OLLAMA_DEFAULT_MODEL
+      const host = await storage.get("ollamaHost") || OLLAMA_DEFAULT_HOST
+      const port = await storage.get("ollamaPort") || OLLAMA_DEFAULT_PORT
+      return await generateWithOllama(prompt, model, `http://${host}:${port}`)
+    }
+    case "gemini": {
+      const model = await storage.get("geminiModel") || "gemini-2.5-flash"
+      return await generateWithGemini(prompt, model)
+    }
+    case "openai": {
+      const model = await storage.get("openaiModel") || "gpt-4o"
+      return await generateWithOpenAI(prompt, model, opts.openaiMaxTokens ?? 500)
+    }
+    default:
+      throw new Error(`Unknown AI provider: ${aiProvider}`)
   }
 }
 
@@ -207,26 +245,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
 
   await logBG("info", `Using AI Provider: ${aiProvider}`, { isPremium: !!isPremium, hasHistory: !!chatHistory })
 
-  const generateOnce = async (p: string) => {
-    switch (aiProvider) {
-      case "ollama": {
-        const model = await storage.get("ollamaModel") || OLLAMA_DEFAULT_MODEL
-        const host = await storage.get("ollamaHost") || OLLAMA_DEFAULT_HOST
-        const port = await storage.get("ollamaPort") || OLLAMA_DEFAULT_PORT
-        return await generateWithOllama(p, model, `http://${host}:${port}`)
-      }
-      case "gemini": {
-        const model = await storage.get("geminiModel") || "gemini-2.5-flash"
-        return await generateWithGemini(p, model)
-      }
-      case "openai": {
-        const model = await storage.get("openaiModel") || "gpt-4o"
-        return await generateWithOpenAI(p, model, !!isPremium)
-      }
-      default:
-        throw new Error(`Unknown AI provider: ${aiProvider}`)
-    }
-  }
+  const generateOnce = (p: string) =>
+    generateWithConfiguredProvider(p, { openaiMaxTokens: isPremium ? 2000 : 500 })
 
   try {
     let result = await generateOnce(prompt)
@@ -259,6 +279,78 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     await logBG("error", `Generation Failed. Prompt was: ${prompt}`, { error: e.message })
     throw e
   }
+}
+
+/**
+ * プロフィール改善案の生成（1テイスト分）
+ * 400字コード検証（短縮リトライ最大2回）と、嗜好欄の名詞保全チェック付き。
+ */
+async function handleGenerateProfile({ fieldType, taste, currentText, myProfileRaw }: any) {
+  let myRaw: any = null
+  try { myRaw = JSON.parse(myProfileRaw) } catch { /* 下のnullチェックで拾う */ }
+  if (!myRaw) {
+    throw new Error("プロフィールデータの取得に失敗しました。Lunaにログインした状態でページを再読み込みしてください。")
+  }
+
+  const audience = resolveAudience(myRaw)
+  let prompt = buildProfilePrompt({ fieldType, taste, currentText: currentText || "", myRaw, audience })
+
+  // 置換ルール（セーフティ回避）は既存メッセージ生成と同じ扱い
+  const replacementRulesEnabled = await storage.get<boolean>("replacementRulesEnabled") ?? true
+  const rules = replacementRulesEnabled
+    ? (await storage.get<{ from: string; to: string }[]>("replacementRules")) || defaultReplacementRules
+    : []
+  rules.forEach((rule) => {
+    if (rule.from) prompt = prompt.split(rule.from).join(rule.to || "")
+  })
+
+  await logBG("info", `Generating profile: ${fieldType}/${taste} (audience=${audience})`)
+
+  const isDebugEnabled = await storage.get<boolean>("isDebugEnabled")
+  if (isDebugEnabled) {
+    await logBG("info", `Profile Prompt Debug: ${prompt}`)
+  }
+
+  const CAP = 400
+  const candidates: string[] = []
+  const first = await generateWithConfiguredProvider(prompt, { openaiMaxTokens: 1000 })
+  candidates.push(first.text)
+
+  // 400字超過時の短縮リトライ（最大2回）
+  let attempt = 0
+  while (candidates[candidates.length - 1].length > CAP && attempt < 2) {
+    attempt++
+    const len = candidates[candidates.length - 1].length
+    const retryPrompt = `${prompt}\n\n【再生成指示】前回の出力は${len}文字で上限400を超えています。優先度の低い内容（推奨事項に相当する部分）から削り、400字以内に収めてください。`
+    await logBG("info", `Profile retry ${attempt}: ${len} chars > ${CAP}`)
+    const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
+    candidates.push(next.text)
+  }
+
+  let text = enforceLength(candidates, CAP)
+  let warning: string | undefined
+  if (text.length > CAP) {
+    warning = "400字に収まりませんでした。採用後に手動で調整してください。"
+  }
+
+  // 嗜好欄のみ: 元の嗜好名詞の保全チェック（セーフティによる無言の希釈検知）
+  if (fieldType === "kink") {
+    const check = checkKinkPreservation(currentText || "", text, rules)
+    if (!check.ok) {
+      await logBG("warn", "Kink preservation failed; retrying", { missing: check.missing })
+      const retryPrompt = `${prompt}\n\n【再生成指示】元の文にある嗜好（${check.missing.join("、")}）が出力から欠落しています。これらを（穏当な言い換えでもよいので）保持したまま書き直してください。400字以内厳守。`
+      const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
+      const recheck = checkKinkPreservation(currentText || "", next.text, rules)
+      if (recheck.ok && next.text.length <= CAP) {
+        text = next.text
+      } else {
+        warning = `元の嗜好の一部（${check.missing.slice(0, 5).join("、")}）が反映されていない可能性があります。`
+      }
+    }
+  }
+
+  await logBG("info", `Profile generated: ${fieldType}/${taste} ${text.length} chars`)
+  return { text, warning }
 }
 
 async function generateWithGemini(prompt: string, model: string) {
@@ -312,7 +404,7 @@ async function generateWithGemini(prompt: string, model: string) {
 
 }
 
-async function generateWithOpenAI(prompt: string, model: string, isPremium = false) {
+async function generateWithOpenAI(prompt: string, model: string, maxOutputTokens = 500) {
   const apiKey = await syncStorage.get("openaiApiKey")
   if (!apiKey) throw new Error("OpenAI API Key is not set")
 
@@ -322,7 +414,7 @@ async function generateWithOpenAI(prompt: string, model: string, isPremium = fal
     model: openai(model),
     system: "You are a helpful assistant.",
     prompt,
-    maxOutputTokens: isPremium ? 2000 : 500,
+    maxOutputTokens,
   })
 
   return { text: text || "" }
