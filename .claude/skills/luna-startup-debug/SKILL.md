@@ -49,6 +49,14 @@ node .claude/skills/luna-startup-debug/verify.mjs
 - `01-list.png` … 会話一覧
 - `02-thread-buttons.png` … スレッドで AI/クリア ボタン注入を確認（メイン成果物）
 
+### 2.5 プロフィール改善機能の確認
+```
+node .claude/skills/luna-startup-debug/verify-profile.mjs
+```
+- `/user/mod` → 自己紹介の「編集する」→「✨ AIで改善」注入 → 3択モーダル（堅実/物語/軽快）表示を検証。
+- APIキー無しプロファイルではカードがエラー表示になるのが正常（注入とUIの確認が目的）。
+- スクショ: `test-results/profile-improve-debug/01-edit-overlay-button.png`, `02-panel-cards.png`
+
 ### 3. 拡張ログの確認（生成が失敗した等の切り分け）
 ```
 node .claude/skills/luna-startup-debug/read-logs.mjs

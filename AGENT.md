@@ -9,6 +9,12 @@ LunaGenは、Plasmo Frameworkを使用したManifest V3準拠のChrome拡張機�
 1.  **Content Script (`content.tsx`)**:
     - `luna-matching.com` のDOMを監視し、`components/Content/GenerateButton.tsx` を注入。
     - `sessionStorage` を介して `interceptor.ts` からデータを受け取り、`utils/profile.ts` で解析。
+1.5. **プロフィール改善 (`components/Content/ProfileImprovePanel.tsx`)**:
+    - `/user/mod`（プロフィール編集）の編集オーバーレイに `ProfileImproveButton` を注入。
+    - 欄判別は `utils/profile-field.ts` の `detectProfileField`（placeholder優先、見出しフォールバック）。
+    - テイスト3択（堅実/物語/軽快）をシャドウDOMモーダルで比較し、`insertText` で反映。保存はサイト純正ボタン。
+    - プロンプト定数は `profile-prompts.ts`（原則の出典: docs/superpowers/specs/2026-07-20-luna-profile-improvement-design.md）。
+    - background の `generate_profile` アクションが生成（400字コード検証・嗜好名詞保全チェック付き）。
 2.  **API Interceptor (`contents/interceptor.ts`)**:
     - `world: "MAIN"` で動作し、XHR/Fetchをフックして Luna の内部APIを傍受。
     - 取得したデータを `window.postMessage` で Content Script へ転送。
