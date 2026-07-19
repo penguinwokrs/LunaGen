@@ -159,18 +159,10 @@ export const ProfileImprovePanel = ({ textarea, fieldType, onClose }: ProfileImp
             <div
                 className="backdrop"
                 onMouseDown={(e) => {
-                    // サイト側の「オーバーレイ外クリックで閉じる」処理を誤爆させない。
-                    // 伝播させると、Lunaの編集オーバーレイがこのクリックを外側クリックと
-                    // 誤認して閉じ、textareaが消失 → MutationObserverがボタンをunmount
-                    // → このパネルも連鎖的に閉じてしまう（カード内クリックでも消える不具合の原因）。
-                    e.stopPropagation()
-                    // mousedownの既定動作（フォーカス移動）を止め、裏で選択中のtextareaを
-                    // blurさせない。blurで編集オーバーレイを閉じるサイト実装だと、上のstop
-                    // Propagationだけでは防げない（blurはクリック伝播とは独立して発生する）。
-                    e.preventDefault()
+                    // 背景そのものを押したときだけ閉じる（カード上のクリックでは閉じない）。
+                    // サイトへのイベント伝播の遮断は host 側で行う（ProfileImproveButton参照）。
                     if (e.target === e.currentTarget) onClose(false)
-                }}
-                onClick={(e) => e.stopPropagation()}>
+                }}>
                 <div className="dialog" role="dialog" aria-modal="true">
                     <div className="header">
                         <span className="title">✨ {PROFILE_FIELD_LABELS[fieldType]}の改善案（3テイスト）</span>

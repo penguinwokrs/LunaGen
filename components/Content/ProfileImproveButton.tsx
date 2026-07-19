@@ -39,6 +39,20 @@ export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButt
         shadow.appendChild(mount)
         const root = createRoot(mount)
 
+        // パネル内の操作をサイトに伝えない。
+        // Lunaの編集オーバーレイは、開いたときに document へ pointerdown(bubble)の
+        // 「外側クリックで閉じる」リスナーを登録する。シャドウDOM内のクリックは
+        // リターゲティングによりサイトからは host（body直下＝オーバーレイの外）への
+        // クリックに見えるため、何もしないとパネルを触るたびに編集画面が閉じてしまう。
+        // 伝播経路は target → mount(Reactのハンドラ) → shadowRoot → host → body →
+        // document なので、host で止めればサイトには届かず自分のUIは正常に動く。
+        const swallow = (e: Event) => e.stopPropagation()
+        const SWALLOWED_EVENTS = [
+            "pointerdown", "pointerup", "mousedown", "mouseup", "click",
+            "touchstart", "touchend", "focusin", "focusout"
+        ]
+        SWALLOWED_EVENTS.forEach((type) => host.addEventListener(type, swallow))
+
         const prevOverflow = document.body.style.overflow
         document.body.style.overflow = "hidden"
 

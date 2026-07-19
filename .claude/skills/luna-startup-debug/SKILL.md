@@ -57,6 +57,17 @@ node .claude/skills/luna-startup-debug/verify-profile.mjs
 - APIキー無しプロファイルではカードがエラー表示になるのが正常（注入とUIの確認が目的）。
 - スクショ: `test-results/profile-improve-debug/01-edit-overlay-button.png`, `02-panel-cards.png`
 
+### 2.6 パネルがサイトのUIを壊さないことの確認（回帰テスト）
+```
+node .claude/skills/luna-startup-debug/verify-panel-isolation.mjs
+```
+- パネル内クリック・再生成・キャンセル・背景クリックで、**背後の編集オーバーレイが維持される**ことを検証。
+- **判定は textarea の有無で行う**（トップ画面は textarea 0個）。「自己紹介」等の見出しテキストは
+  トップ画面にも存在するため判定に使えない（過去にこれで誤検証した）。
+- 背景: Lunaは編集オーバーレイを開くと `document` に `pointerdown`(bubble) の外側クリック検知を登録する。
+  シャドウDOM内のクリックはリターゲティングで host（body直下）への操作に見えるため、
+  host でイベントを止めないと編集画面が閉じてしまう。
+
 ### 3. 拡張ログの確認（生成が失敗した等の切り分け）
 ```
 node .claude/skills/luna-startup-debug/read-logs.mjs
