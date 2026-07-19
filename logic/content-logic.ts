@@ -48,6 +48,30 @@ export async function getMyProfile() {
     }
 }
 
+/**
+ * 自分のプロフィールraw JSONを取得する（ストレージ優先、フォールバックでAPI）
+ * プロフィール改善機能が生成の事実根拠として使う。
+ */
+export async function getMyProfileRaw(): Promise<string | null> {
+    try {
+        const stored = await storage.get("myProfileRaw")
+        if (stored && (stored as string).length > 2) return stored as string
+
+        await addLog("info", "Fetching myProfileRaw from API fallback", null, "CONTENT")
+        const res = await fetch("https://luna-matching.com/api/user/get/me")
+        if (!res.ok) return null
+
+        const data = await res.json()
+        const profileData = data.profile || data.user || data
+        const raw = JSON.stringify(profileData)
+        await storage.set("myProfileRaw", raw)
+        return raw
+    } catch (e: any) {
+        await addLog("error", "Failed to fetch myProfileRaw", { error: e.toString() }, "CONTENT")
+        return null
+    }
+}
+
 export interface PartnerProfile {
     /** 生成用に整形したプロフィールテキスト */
     text: string

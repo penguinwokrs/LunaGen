@@ -3,8 +3,10 @@ import { Storage } from "@plasmohq/storage"
 import { createRoot, type Root } from "react-dom/client"
 
 import { GenerateButton } from "./components/Content/GenerateButton"
+import { ProfileImproveButton } from "./components/Content/ProfileImproveButton"
 import { addLog } from "./utils/logger"
 import { extractProfileFromJSON } from "./utils/profile"
+import { detectProfileField } from "./utils/profile-field"
 import { mergePartnerCache } from "./utils/partner"
 import { getThreadIdFromMessageListUrl } from "./utils/url"
 
@@ -116,6 +118,41 @@ function injectButtons() {
 }
 
 /**
+ * プロフィール編集ページ(/user/mod)の編集オーバーレイに
+ * 「AIで改善」ボタンを注入する。欄はplaceholder（フォールバックで
+ * オーバーレイ見出し）から判別し、判別不能なら注入しない。
+ */
+function findOverlayHeading(textarea: HTMLTextAreaElement): string {
+  let node: HTMLElement | null = textarea.parentElement
+  for (let hops = 0; hops < 12 && node; hops++) {
+    const text = node.innerText || ""
+    if (text.includes("保存する")) {
+      return (text.split("\n")[0] || "").trim()
+    }
+    node = node.parentElement
+  }
+  return ""
+}
+
+function injectProfileButtons() {
+  if (location.pathname !== "/user/mod") return
+
+  const textareas = document.querySelectorAll("textarea")
+  textareas.forEach((textarea) => {
+    if (textarea.dataset.lunaAiInjected === "true") return
+    const fieldType = detectProfileField(textarea.placeholder, findOverlayHeading(textarea))
+    if (!fieldType) return
+    textarea.dataset.lunaAiInjected = "true"
+
+    const container = document.createElement("div")
+    textarea.parentElement?.appendChild(container)
+    const root = createRoot(container)
+    root.render(<ProfileImproveButton textarea={textarea} fieldType={fieldType} />)
+    injectedButtons.set(textarea, { root, container })
+  })
+}
+
+/**
  * DOM から外れた textarea のボタンを unmount して後始末する
  */
 function cleanupDetachedButtons() {
@@ -136,6 +173,7 @@ function cleanupDetachedButtons() {
 function processDom() {
   cleanupDetachedButtons()
   injectButtons()
+  injectProfileButtons()
 }
 
 /**
