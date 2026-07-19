@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+    buildProfilePrompt,
     checkKinkPreservation,
     detectProfileField,
     enforceLength,
     extractKinkTerms,
     resolveAudience
 } from "./profile-field"
+import { PROFILE_TASTES } from "../profile-prompts"
 
 describe("detectProfileField", () => {
     // 実機調査 2026-07-20: /user/mod の各編集オーバーレイの placeholder
@@ -97,5 +99,84 @@ describe("checkKinkPreservation", () => {
 
     it("箇条書きの無い元文は常にok", () => {
         expect(checkKinkPreservation("散文のみ", "何でも")).toEqual({ ok: true, missing: [] })
+    })
+})
+
+describe("PROFILE_TASTES", () => {
+    it("3テイスト（堅実/物語/軽快）が定義されている", () => {
+        expect(PROFILE_TASTES.map((t) => t.id)).toEqual(["solid", "story", "light"])
+        expect(PROFILE_TASTES.map((t) => t.label)).toEqual(["堅実", "物語", "軽快"])
+        for (const t of PROFILE_TASTES) {
+            expect(t.tagline.length).toBeGreaterThan(0)
+            expect(t.instruction.length).toBeGreaterThan(20)
+        }
+    })
+})
+
+describe("buildProfilePrompt", () => {
+    const myRaw = {
+        sex: 2,
+        conditions_sex: "1",
+        age: "30代前半",
+        my_type: "I,E",
+        q_dom: 4,
+        profile: "既存の自己紹介",
+        text_my_like: "・言葉責め\n・拘束",
+        conditions_text: "既存の条件",
+        text_my_ng: "既存のNG"
+    }
+    const base = {
+        fieldType: "intro" as const,
+        taste: "solid" as const,
+        currentText: "はじめまして。関西人でIT関連の仕事をしています。休日は映画とキックボクシング。",
+        myRaw,
+        audience: "women" as const
+    }
+
+    it("欄ラベル・テイスト指示・現在本文・基本データを含む", () => {
+        const p = buildProfilePrompt(base)
+        expect(p).toContain("自己紹介")
+        expect(p).toContain("箇条書き") // solidの指示
+        expect(p).toContain(base.currentText) // 素材
+        expect(p).toContain("30代前半") // extractProfileFromJSONの出力
+        expect(p).toContain("400字以内")
+    })
+
+    it("読者=womenとmenで原則セットが切り替わる", () => {
+        const w = buildProfilePrompt(base)
+        const m = buildProfilePrompt({ ...base, audience: "men" })
+        expect(w).toContain("読者は女性")
+        expect(m).toContain("読者は男性")
+        expect(w).not.toBe(m)
+    })
+
+    it("テイストごとに指示が変わる", () => {
+        const solid = buildProfilePrompt(base)
+        const story = buildProfilePrompt({ ...base, taste: "story" })
+        const light = buildProfilePrompt({ ...base, taste: "light" })
+        expect(story).toContain("散文")
+        expect(story).toContain("エピソードは書かない")
+        expect(light).toContain("30字以下")
+        expect(new Set([solid, story, light]).size).toBe(3)
+    })
+
+    it("30字未満の元文では空欄フォールバック（要記入プレースホルダ指示）に切替", () => {
+        const p = buildProfilePrompt({ ...base, currentText: "よろしく" })
+        expect(p).toContain("〔要記入")
+        expect(p).toContain("骨子")
+    })
+
+    it("30字以上ではフォールバック指示を含まない", () => {
+        expect(buildProfilePrompt(base)).not.toContain("〔要記入")
+    })
+
+    it("ng欄はaudienceに依らず同じ原則（共通セット）", () => {
+        const w = buildProfilePrompt({ ...base, fieldType: "ng", audience: "women" })
+        const m = buildProfilePrompt({ ...base, fieldType: "ng", audience: "men" })
+        expect(w).toContain("境界線")
+        // 原則ブロックは同一（読者ラベル行のみ異なる）
+        expect(w.split("読者は女性（あなたのプロフィールを見る女性会員）").join("X")).toBe(
+            m.split("読者は男性（あなたのプロフィールを見る男性会員）").join("X")
+        )
     })
 })

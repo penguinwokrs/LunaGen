@@ -38,6 +38,28 @@ describe("extractProfileFromJSON", () => {
         expect(text).toContain("はじめまして")
     })
 
+    it("ageが表示用文字列（例: 30代前半）ならそのまま表示する", () => {
+        // get/me は年齢を "30代前半" のような表示文字列で返す。
+        // 従来は age_list に無いと「非公開」へ潰れていた。
+        const text = extractProfileFromJSON({
+            id: 1,
+            name: "A",
+            age: "30代前半",
+            profile: "はじめまして、よろしくお願いします"
+        })
+        expect(text).toContain("年齢: 30代前半")
+    })
+
+    it("ageが数値コードでage_listに無い場合は従来どおり非公開", () => {
+        const text = extractProfileFromJSON({
+            id: 1,
+            name: "A",
+            age: 3,
+            profile: "はじめまして、よろしくお願いします"
+        })
+        expect(text).toContain("年齢: 非公開")
+    })
+
     it("空・null では空文字を返す", () => {
         expect(extractProfileFromJSON(null)).toBe("")
         expect(extractProfileFromJSON(undefined)).toBe("")

@@ -6,6 +6,17 @@
  * DOM・chrome API に依存しない（Vitest対象）。
  */
 
+import {
+    PROFILE_CURRENT_SECTION,
+    PROFILE_EMPTY_SECTION,
+    PROFILE_FIELD_LABELS,
+    PROFILE_GUARDRAILS,
+    PROFILE_PRINCIPLES,
+    PROFILE_PROMPT_TEMPLATE,
+    PROFILE_TASTES
+} from "../profile-prompts"
+import { extractProfileFromJSON } from "./profile"
+
 export type ProfileFieldType = "intro" | "kink" | "conditions" | "ng"
 export type TasteId = "solid" | "story" | "light"
 export type Audience = "women" | "men"
@@ -81,6 +92,43 @@ export function extractKinkTerms(source: string): string[] {
         .map((l) => l.replace(/^[・\-–—*●○◎•]\s*/, ""))
         .map((l) => l.replace(/[（(].*$/, "").trim())
         .filter((l) => l.length >= 2 && l.length <= 20)
+}
+
+/** 元文がこの長さ未満なら「空欄フォールバック」（骨子生成+要記入プレースホルダ）に切替 */
+export const EMPTY_TEXT_THRESHOLD = 30
+
+export function buildProfilePrompt(input: {
+    fieldType: ProfileFieldType
+    taste: TasteId
+    currentText: string
+    myRaw: any
+    audience: Audience
+}): string {
+    const { fieldType, taste, currentText, myRaw, audience } = input
+    const tasteDef = PROFILE_TASTES.find((t) => t.id === taste) || PROFILE_TASTES[0]
+    const principles =
+        fieldType === "ng" ? PROFILE_PRINCIPLES.ng : PROFILE_PRINCIPLES[fieldType][audience]
+    const audienceLabel =
+        audience === "women"
+            ? "女性（あなたのプロフィールを見る女性会員）"
+            : "男性（あなたのプロフィールを見る男性会員）"
+    const profileContext = extractProfileFromJSON(myRaw) || "（基本データなし）"
+
+    const trimmed = (currentText || "").trim()
+    const currentSection =
+        trimmed.length < EMPTY_TEXT_THRESHOLD
+            ? PROFILE_EMPTY_SECTION.split("{current_text}").join(trimmed)
+            : PROFILE_CURRENT_SECTION.split("{current_text}").join(trimmed)
+
+    return PROFILE_PROMPT_TEMPLATE
+        .split("{field_label}").join(PROFILE_FIELD_LABELS[fieldType])
+        .split("{audience_label}").join(audienceLabel)
+        .split("{field_principles}").join(principles)
+        .split("{taste_label}").join(tasteDef.label)
+        .split("{taste_instruction}").join(tasteDef.instruction)
+        .split("{guardrails}").join(PROFILE_GUARDRAILS)
+        .split("{profile_context}").join(profileContext)
+        .split("{current_section}").join(currentSection)
 }
 
 /**

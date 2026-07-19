@@ -32,7 +32,14 @@ export function extractProfileFromJSON(u: any, rawResponse?: any): string {
             text += `年齢: ${age}歳\n`
         } else {
             const ageDisplay = ageList?.[String(data.age)]
-            text += `年齢: ${ageDisplay || "非公開"}\n`
+            if (ageDisplay) {
+                text += `年齢: ${ageDisplay}\n`
+            } else if (typeof data.age === "string" && Number.isNaN(age) && data.age.trim()) {
+                // get/me 等は「30代前半」のような表示文字列を直接返す
+                text += `年齢: ${data.age.trim()}\n`
+            } else {
+                text += `年齢: 非公開\n`
+            }
         }
     }
     if (data.sex) {
