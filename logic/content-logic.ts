@@ -67,6 +67,10 @@ export async function getMyProfileRaw(): Promise<string | null> {
         // 無検証で保存すると異常ボディが恒久キャッシュされ、需給判定まで汚染する。
         const text = extractProfileFromJSON(profileData, data)
         if (!text || text.length <= 10) return null
+        // area 表示名の解決（content.tsx のキャッシュ経路と同じ補完）
+        if (data.area_list && profileData.area && !profileData.area_text) {
+            profileData.area_text = data.area_list[String(profileData.area)]
+        }
         const raw = JSON.stringify(profileData)
         await storage.set("myProfileRaw", raw)
         return raw

@@ -293,16 +293,15 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
   }
 
   const audience = resolveAudience(myRaw)
-  let prompt = buildProfilePrompt({ fieldType, taste, currentText: currentText || "", myRaw, audience })
+  const prompt = buildProfilePrompt({ fieldType, taste, currentText: currentText || "", myRaw, audience })
 
-  // 置換ルール（セーフティ回避）は既存メッセージ生成と同じ扱い
-  const replacementRulesEnabled = await storage.get<boolean>("replacementRulesEnabled") ?? true
-  const rules = replacementRulesEnabled
-    ? (await storage.get<{ from: string; to: string }[]>("replacementRules")) || defaultReplacementRules
-    : []
-  rules.forEach((rule) => {
-    if (rule.from) prompt = prompt.split(rule.from).join(rule.to || "")
-  })
+  // 注意: プロフィール生成では置換ルールをプロンプトに適用しない。
+  // メッセージと違い出力は保存される公開文章であり、置換で元文が書き換わると
+  // 生成結果の語彙が歪む（例: 出血→激しいこと に置換され、NG欄の意味が反転する
+  // 事故を実LLM評価で確認済み）。セーフティはBLOCK_NONE設定と、失敗時の
+  // カード単位再生成で担保する。ルールは保全チェックの照合にのみ使う。
+  const rules =
+    (await storage.get<{ from: string; to: string }[]>("replacementRules")) || defaultReplacementRules
 
   await logBG("info", `Generating profile: ${fieldType}/${taste} (audience=${audience})`)
 
@@ -321,7 +320,7 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
   while (candidates[candidates.length - 1].length > CAP && attempt < 2) {
     attempt++
     const len = candidates[candidates.length - 1].length
-    const retryPrompt = `${prompt}\n\n【再生成指示】前回の出力は${len}文字で上限400を超えています。優先度の低い内容（推奨事項に相当する部分）から削り、400字以内に収めてください。`
+    const retryPrompt = `${prompt}\n\n【再生成指示】前回の出力は${len}文字で上限400を超えています。優先度の低い内容（推奨事項に相当する部分）から削り、330〜380字を目安に書き直してください（400字を1文字でも超えたら失格）。`
     await logBG("info", `Profile retry ${attempt}: ${len} chars > ${CAP}`)
     const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
     candidates.push(next.text)
@@ -329,20 +328,17 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
 
   let text = enforceLength(candidates, CAP)
 
-  // 嗜好欄のみ: 元の嗜好名詞の保全チェック（セーフティによる無言の希釈検知）
+  // 嗜好欄のみ: 元の嗜好名詞の保全チェック（セーフティによる無言の希釈検知）。
+  // 読者=女性（男性ユーザー）は「主要2〜3個に絞る」原則のため lenient。
+  const preservationMode = audience === "men" ? "strict" as const : "lenient" as const
   let kinkWarning: string | undefined
   if (fieldType === "kink") {
-    const check = checkKinkPreservation(currentText || "", text, rules)
+    const check = checkKinkPreservation(currentText || "", text, rules, preservationMode)
     if (!check.ok) {
       await logBG("warn", "Kink preservation failed; retrying", { missingCount: check.missing.length })
-      // リトライプロンプトには置換ルール適用後の語を載せる。
-      // 原語を再送するとセーフティで同じブロックを踏み直しやすい。
-      const applyRules = (t: string) =>
-        rules.reduce((acc, r) => (r.from ? acc.split(r.from).join(r.to || "") : acc), t)
-      const missingSafe = check.missing.map(applyRules)
-      const retryPrompt = `${prompt}\n\n【再生成指示】元の文にある嗜好（${missingSafe.join("、")}）が出力から欠落しています。これらを（穏当な言い換えでもよいので）保持したまま書き直してください。400字以内厳守。`
+      const retryPrompt = `${prompt}\n\n【再生成指示】元の文にある嗜好（${check.missing.join("、")}）が出力から欠落しています。これらを（穏当な言い換えでもよいので）保持したまま書き直してください。400字以内厳守。`
       const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
-      const recheck = checkKinkPreservation(currentText || "", next.text, rules)
+      const recheck = checkKinkPreservation(currentText || "", next.text, rules, preservationMode)
       if (recheck.ok && next.text.length <= CAP) {
         text = next.text
       } else {

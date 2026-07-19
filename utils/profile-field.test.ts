@@ -105,6 +105,25 @@ describe("checkKinkPreservation", () => {
     it("箇条書きの無い元文は常にok", () => {
         expect(checkKinkPreservation("散文のみ", "何でも")).toEqual({ ok: true, missing: [] })
     })
+
+    it("語幹の言い換え（おもちゃ系→おもちゃ、押さえつけて無理やり→押さえつけ）を保持とみなす", () => {
+        const src2 = "・おもちゃ系\n・押さえつけて無理やり\n・言葉責め\n・拘束\n・命令"
+        const out = "おもちゃや押さえつけ（疑似）も、言葉責め・拘束・命令と合わせて合意の上で。"
+        expect(checkKinkPreservation(src2, out)).toEqual({ ok: true, missing: [] })
+    })
+
+    it("lenientモード（読者=女性: 主要2〜3個に絞る原則）は3語以上残っていればok", () => {
+        const src2 = "・言葉責め\n・拘束\n・命令\n・羞恥\n・首絞め\n・圧迫\n・鞭"
+        const out = "言葉責めと拘束、命令が好きです。度合いは相談しながら。"
+        expect(checkKinkPreservation(src2, out, [], "lenient").ok).toBe(true)
+        expect(checkKinkPreservation(src2, out, [], "strict").ok).toBe(false)
+    })
+
+    it("lenientモードでも3語未満しか残らなければng（無言の希釈）", () => {
+        const src2 = "・言葉責め\n・拘束\n・命令\n・羞恥\n・首絞め"
+        const out = "言葉責めが好きです。"
+        expect(checkKinkPreservation(src2, out, [], "lenient").ok).toBe(false)
+    })
 })
 
 describe("PROFILE_TASTES", () => {

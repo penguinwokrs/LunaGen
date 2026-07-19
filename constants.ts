@@ -87,6 +87,7 @@ export const FOCUS_TOPIC_INSTRUCTION = `# 優先話題（最重要・ユーザ�
 - 文字数・禁止事項・トーン等、他のすべての制約はこれまで通り維持する`
 
 export const GEMINI_MODELS = [
+    "gemini-3.5-flash",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     "gemini-3-flash-preview",

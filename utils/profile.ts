@@ -47,7 +47,9 @@ export function extractProfileFromJSON(u: any, rawResponse?: any): string {
         if (sexDisplay) text += `性別: ${sexDisplay}\n`
     }
     if (data.area) {
-        const areaDisplay = areaList?.[String(data.area)]
+        // area_text はキャッシュ時に area_list を引いて解決済みの表示名
+        // （myProfileRaw には area_list が同梱されないための補完）
+        const areaDisplay = areaList?.[String(data.area)] || data.area_text
         if (areaDisplay) text += `居住地: ${areaDisplay}\n`
     }
     if (data.relationship_text || data.relationship) text += `目的: ${data.relationship_text || data.relationship}\n`

@@ -60,6 +60,17 @@ describe("extractProfileFromJSON", () => {
         expect(text).toContain("年齢: 非公開")
     })
 
+    it("area_listが無くてもarea_text（キャッシュ時に解決済みの表示名）があれば居住地を出す", () => {
+        const text = extractProfileFromJSON({
+            id: 1,
+            name: "A",
+            area: 18,
+            area_text: "神奈川県",
+            profile: "はじめまして、よろしくお願いします"
+        })
+        expect(text).toContain("居住地: 神奈川県")
+    })
+
     it("空・null では空文字を返す", () => {
         expect(extractProfileFromJSON(null)).toBe("")
         expect(extractProfileFromJSON(undefined)).toBe("")

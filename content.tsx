@@ -38,6 +38,11 @@ window.addEventListener("message", async (event) => {
     const profileData = data.profile || data.user || data
     const profileText = extractProfileFromJSON(profileData, data)
     if (profileText && profileText.length > 10) {
+      // area は数値コードで返るため、raw キャッシュには表示名を解決して同梱する
+      // （area_list はレスポンス直下にあり raw には保存されない）
+      if (data.area_list && profileData.area && !profileData.area_text) {
+        profileData.area_text = data.area_list[String(profileData.area)]
+      }
       await storage.set("myProfile", profileText)
       await storage.set("myProfileRaw", JSON.stringify(profileData))
       const now = new Date()

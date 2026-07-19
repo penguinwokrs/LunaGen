@@ -133,24 +133,46 @@ export function buildProfilePrompt(input: {
 
 /**
  * 生成出力に元の嗜好名詞が残っているかを確認する（セーフティによる
- * 「無言の希釈」の検知）。replacementRules の変換後語で残っていても保持扱い。
- * 欠落が2割以下なら許容。
+ * 「無言の希釈」の検知）。replacementRules の変換後語や語幹の言い換え
+ * （「おもちゃ系」→「おもちゃ」等）で残っていても保持扱い。
+ *
+ * mode:
+ * - strict: 欠落2割以下で許容。読者=男性向け（女性ユーザー）。原則が
+ *   「元の嗜好名詞はすべて残す」のため厳しく見る
+ * - lenient: 3語（元が少なければ全語）残っていれば許容。読者=女性向け
+ *   （男性ユーザー）。原則が「主要2〜3個に絞って構造を語る」のため、
+ *   意図的な圧縮を欠落と誤検知しない
  */
 export function checkKinkPreservation(
     source: string,
     output: string,
-    rules: { from: string; to: string }[] = []
+    rules: { from: string; to: string }[] = [],
+    mode: "strict" | "lenient" = "strict"
 ): { ok: boolean; missing: string[] } {
     const terms = extractKinkTerms(source)
     if (terms.length === 0) return { ok: true, missing: [] }
+
+    const variants = (t: string): string[] => {
+        const v = [t]
+        const noSuffix = t.replace(/系$/, "")
+        if (noSuffix !== t && noSuffix.length >= 2) v.push(noSuffix)
+        if (t.length >= 6) v.push(t.slice(0, 4)) // 長い複合語は先頭4字で語幹照合
+        return v
+    }
+    const applyRules = (t: string) =>
+        rules.reduce((acc, r) => (r.from ? acc.split(r.from).join(r.to || "") : acc), t)
+
     const missing = terms.filter((t) => {
-        if (output.includes(t)) return false
-        const mapped = rules.reduce(
-            (acc, r) => (r.from ? acc.split(r.from).join(r.to || "") : acc),
-            t
-        )
-        if (mapped !== t && output.includes(mapped)) return false
-        return true
+        const cands = [...variants(t)]
+        const mapped = applyRules(t)
+        if (mapped !== t) cands.push(...variants(mapped))
+        return !cands.some((c) => output.includes(c))
     })
-    return { ok: missing.length <= Math.floor(terms.length * 0.2), missing }
+
+    const preserved = terms.length - missing.length
+    const ok =
+        mode === "lenient"
+            ? preserved >= Math.min(3, terms.length)
+            : missing.length <= Math.floor(terms.length * 0.2)
+    return { ok, missing }
 }

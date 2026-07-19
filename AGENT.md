@@ -53,6 +53,9 @@ LunaGenは、Plasmo Frameworkを使用したManifest V3準拠のChrome拡張機�
 
 ## 🧪 テスト
 - **ユニット**: Vitest (`*.test.tsx`)。`pnpm exec vitest`。
+- **プロフィール生成の実LLM評価**: `test-profile-quality.ts`（ヘッダーに実行方法）。
+  APIキーは `~/.gemini_api_key`。4欄×3テイストを生成し、自動チェック（400字/嗜好保全/禁止表現/Markdown混入）+LLM審査（書き分け/捏造/同意表現）を実施。
+  **注意: プロフィール生成では置換ルールをプロンプトに適用しない**（保存される公開文章のため語彙を歪めない。評価で「出血→激しいこと」置換によるNG欄の意味反転事故を確認済み）。
 - **E2E / ブラウザ操作**: Playwright (`@playwright/test`)。`e2e/` 配下。
   - `pnpm build` 済みの `build/chrome-mv3-prod` を persistent context でロードする。
   - `pnpm e2e` で実行。詳細は `e2e/README.md`。
