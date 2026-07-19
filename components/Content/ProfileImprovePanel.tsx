@@ -102,7 +102,19 @@ export const ProfileImprovePanel = ({ textarea, fieldType, onClose }: ProfileImp
             if (e.key === "Escape") onClose(false)
         }
         window.addEventListener("keydown", onKey)
-        return () => window.removeEventListener("keydown", onKey)
+
+        // SPA遷移で編集ページ自体から離れたら安全のため強制クローズする。
+        // 注入元ボタンのReactライフサイクル（unmount）ではなくURLで判定するのは、
+        // Luna側の再レンダリングで同じページ内でもボタンがunmount/再注入される
+        // ことがあり、それをナビゲーションと誤認して閉じてしまうのを避けるため。
+        const navCheck = setInterval(() => {
+            if (location.pathname !== "/user/mod") onClose(false)
+        }, 1000)
+
+        return () => {
+            window.removeEventListener("keydown", onKey)
+            clearInterval(navCheck)
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
@@ -147,8 +159,18 @@ export const ProfileImprovePanel = ({ textarea, fieldType, onClose }: ProfileImp
             <div
                 className="backdrop"
                 onMouseDown={(e) => {
+                    // サイト側の「オーバーレイ外クリックで閉じる」処理を誤爆させない。
+                    // 伝播させると、Lunaの編集オーバーレイがこのクリックを外側クリックと
+                    // 誤認して閉じ、textareaが消失 → MutationObserverがボタンをunmount
+                    // → このパネルも連鎖的に閉じてしまう（カード内クリックでも消える不具合の原因）。
+                    e.stopPropagation()
+                    // mousedownの既定動作（フォーカス移動）を止め、裏で選択中のtextareaを
+                    // blurさせない。blurで編集オーバーレイを閉じるサイト実装だと、上のstop
+                    // Propagationだけでは防げない（blurはクリック伝播とは独立して発生する）。
+                    e.preventDefault()
                     if (e.target === e.currentTarget) onClose(false)
-                }}>
+                }}
+                onClick={(e) => e.stopPropagation()}>
                 <div className="dialog" role="dialog" aria-modal="true">
                     <div className="header">
                         <span className="title">✨ {PROFILE_FIELD_LABELS[fieldType]}の改善案（3テイスト）</span>

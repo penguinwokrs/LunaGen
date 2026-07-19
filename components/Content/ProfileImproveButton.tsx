@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useState } from "react"
 import { createRoot } from "react-dom/client"
 
 import { addLog } from "../../utils/logger"
@@ -13,16 +13,15 @@ interface ProfileImproveButtonProps {
 export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButtonProps) => {
     const [open, setOpen] = useState(false)
     const [adopted, setAdopted] = useState(false)
-    // 開いているパネルを閉じる関数。SPA遷移でこのボタンごとunmountされたとき、
-    // モーダルとbodyスクロールロックを道連れに片付けるために保持する。
-    const closePanelRef = useRef<((didAdopt: boolean) => void) | null>(null)
 
-    useEffect(() => {
-        return () => {
-            closePanelRef.current?.(false)
-        }
-    }, [])
-
+    // 注意: パネルはこのボタンのReactツリーの外（body直下の独立したシャドウDOM
+    // ルート）に描画し、このコンポーネントのライフサイクルに連動させない。
+    // Lunaの編集オーバーレイは自身のDOMを（このボタン注入先の親要素ごと）
+    // クリックのたびに再レンダーすることがあり、その際このボタンは
+    // unmount→再注入されるが、それに追従してパネルまで閉じると「パネル内の
+    // どこをクリックしても消える」ように見えてしまう。パネル自身の生死は
+    // ユーザー操作（キャンセル/背景クリック/採用）と、ProfileImprovePanel内の
+    // ページ離脱監視だけで決める。
     const openPanel = async (e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
@@ -43,9 +42,10 @@ export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButt
         const prevOverflow = document.body.style.overflow
         document.body.style.overflow = "hidden"
 
+        let closed = false
         const close = (didAdopt: boolean) => {
-            if (closePanelRef.current !== close) return // 二重close防止
-            closePanelRef.current = null
+            if (closed) return // 二重close防止
+            closed = true
             document.body.style.overflow = prevOverflow
             // Reactのレンダー中unmountを避けるため次tickで破棄
             setTimeout(() => {
@@ -58,7 +58,6 @@ export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButt
                 setTimeout(() => setAdopted(false), 8000)
             }
         }
-        closePanelRef.current = close
 
         root.render(<ProfileImprovePanel textarea={textarea} fieldType={fieldType} onClose={close} />)
     }
