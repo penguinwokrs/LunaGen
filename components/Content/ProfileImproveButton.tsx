@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 
 import { addLog } from "../../utils/logger"
@@ -13,6 +13,15 @@ interface ProfileImproveButtonProps {
 export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButtonProps) => {
     const [open, setOpen] = useState(false)
     const [adopted, setAdopted] = useState(false)
+    // 開いているパネルを閉じる関数。SPA遷移でこのボタンごとunmountされたとき、
+    // モーダルとbodyスクロールロックを道連れに片付けるために保持する。
+    const closePanelRef = useRef<((didAdopt: boolean) => void) | null>(null)
+
+    useEffect(() => {
+        return () => {
+            closePanelRef.current?.(false)
+        }
+    }, [])
 
     const openPanel = async (e: React.MouseEvent) => {
         e.preventDefault()
@@ -35,6 +44,8 @@ export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButt
         document.body.style.overflow = "hidden"
 
         const close = (didAdopt: boolean) => {
+            if (closePanelRef.current !== close) return // 二重close防止
+            closePanelRef.current = null
             document.body.style.overflow = prevOverflow
             // Reactのレンダー中unmountを避けるため次tickで破棄
             setTimeout(() => {
@@ -47,6 +58,7 @@ export const ProfileImproveButton = ({ textarea, fieldType }: ProfileImproveButt
                 setTimeout(() => setAdopted(false), 8000)
             }
         }
+        closePanelRef.current = close
 
         root.render(<ProfileImprovePanel textarea={textarea} fieldType={fieldType} onClose={close} />)
     }

@@ -328,26 +328,35 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
   }
 
   let text = enforceLength(candidates, CAP)
-  let warning: string | undefined
-  if (text.length > CAP) {
-    warning = "400字に収まりませんでした。採用後に手動で調整してください。"
-  }
 
   // 嗜好欄のみ: 元の嗜好名詞の保全チェック（セーフティによる無言の希釈検知）
+  let kinkWarning: string | undefined
   if (fieldType === "kink") {
     const check = checkKinkPreservation(currentText || "", text, rules)
     if (!check.ok) {
-      await logBG("warn", "Kink preservation failed; retrying", { missing: check.missing })
-      const retryPrompt = `${prompt}\n\n【再生成指示】元の文にある嗜好（${check.missing.join("、")}）が出力から欠落しています。これらを（穏当な言い換えでもよいので）保持したまま書き直してください。400字以内厳守。`
+      await logBG("warn", "Kink preservation failed; retrying", { missingCount: check.missing.length })
+      // リトライプロンプトには置換ルール適用後の語を載せる。
+      // 原語を再送するとセーフティで同じブロックを踏み直しやすい。
+      const applyRules = (t: string) =>
+        rules.reduce((acc, r) => (r.from ? acc.split(r.from).join(r.to || "") : acc), t)
+      const missingSafe = check.missing.map(applyRules)
+      const retryPrompt = `${prompt}\n\n【再生成指示】元の文にある嗜好（${missingSafe.join("、")}）が出力から欠落しています。これらを（穏当な言い換えでもよいので）保持したまま書き直してください。400字以内厳守。`
       const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
       const recheck = checkKinkPreservation(currentText || "", next.text, rules)
       if (recheck.ok && next.text.length <= CAP) {
         text = next.text
       } else {
-        warning = `元の嗜好の一部（${check.missing.slice(0, 5).join("、")}）が反映されていない可能性があります。`
+        // ユーザー向け警告は原語のままの方が分かりやすい（APIには送られない）
+        kinkWarning = `元の嗜好の一部（${check.missing.slice(0, 5).join("、")}）が反映されていない可能性があります。`
       }
     }
   }
+
+  // 最終テキスト確定後に警告を決める（リトライで差し替わった後の残留/上書きを防ぐ）
+  const warning =
+    text.length > CAP
+      ? "400字に収まりませんでした。採用後に手動で調整してください。"
+      : kinkWarning
 
   await logBG("info", `Profile generated: ${fieldType}/${taste} ${text.length} chars`)
   return { text, warning }

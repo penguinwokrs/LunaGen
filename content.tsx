@@ -140,8 +140,17 @@ function injectProfileButtons() {
   const textareas = document.querySelectorAll("textarea")
   textareas.forEach((textarea) => {
     if (textarea.dataset.lunaAiInjected === "true") return
-    const fieldType = detectProfileField(textarea.placeholder, findOverlayHeading(textarea))
-    if (!fieldType) return
+    if (textarea.dataset.lunaProfileSkip === "true") return
+
+    // placeholderで判別できれば見出し探索（innerText=layout強制）を省く
+    let fieldType = detectProfileField(textarea.placeholder)
+    if (!fieldType) fieldType = detectProfileField(null, findOverlayHeading(textarea))
+    if (!fieldType) {
+      // placeholderを持つのに判別不能な欄は対象外として確定し、
+      // mutationバッチごとの再探索を止める（placeholder無しは次回再判定）
+      if ((textarea.placeholder || "").trim()) textarea.dataset.lunaProfileSkip = "true"
+      return
+    }
     textarea.dataset.lunaAiInjected = "true"
 
     const container = document.createElement("div")

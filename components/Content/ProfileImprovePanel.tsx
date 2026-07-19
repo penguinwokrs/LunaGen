@@ -109,9 +109,36 @@ export const ProfileImprovePanel = ({ textarea, fieldType, onClose }: ProfileImp
     const adopt = async (tasteId: TasteId) => {
         const card = cards[tasteId]
         if (card.status !== "done") return
+        // SPA遷移やサイト側再レンダーでtextareaがDOMから外れていると、
+        // 書き込んでも画面に反映されず生成結果が消える。コピー導線に誘導する。
+        if (!textarea.isConnected) {
+            setCards((prev) => ({
+                ...prev,
+                [tasteId]: {
+                    status: "error",
+                    message:
+                        "入力欄が見つかりません（画面が切り替わった可能性）。「コピー」で本文を控えてから、編集画面を開き直して貼り付けてください。"
+                }
+            }))
+            await addLog("warn", "Adopt failed: textarea detached", { fieldType, taste: tasteId }, "CONTENT")
+            return
+        }
         insertText(textarea, card.text)
         await addLog("info", "Profile suggestion adopted", { fieldType, taste: tasteId }, "CONTENT")
         onClose(true)
+    }
+
+    const [copiedTaste, setCopiedTaste] = useState<TasteId | null>(null)
+    const copy = async (tasteId: TasteId) => {
+        const card = cards[tasteId]
+        if (card.status !== "done") return
+        try {
+            await navigator.clipboard.writeText(card.text)
+            setCopiedTaste(tasteId)
+            setTimeout(() => setCopiedTaste((cur) => (cur === tasteId ? null : cur)), 2000)
+        } catch {
+            /* クリップボード不許可時は無視（採用ボタンが本線） */
+        }
     }
 
     return (
@@ -155,6 +182,12 @@ export const ProfileImprovePanel = ({ textarea, fieldType, onClose }: ProfileImp
                                             disabled={card.status === "loading"}
                                             onClick={() => generate(t.id)}>
                                             ♻ 再生成
+                                        </button>
+                                        <button
+                                            className="btn regen"
+                                            disabled={card.status !== "done"}
+                                            onClick={() => copy(t.id)}>
+                                            {copiedTaste === t.id ? "✓ コピー済" : "コピー"}
                                         </button>
                                         <button
                                             className="btn adopt"

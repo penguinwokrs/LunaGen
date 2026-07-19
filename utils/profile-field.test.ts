@@ -49,6 +49,11 @@ describe("resolveAudience", () => {
         expect(resolveAudience({})).toBe("women")
         expect(resolveAudience(null)).toBe("women")
     })
+
+    it("sexが文字列で来ても推定できる（APIは数値/文字列が揺れる）", () => {
+        expect(resolveAudience({ sex: "1" })).toBe("men")
+        expect(resolveAudience({ sex: "2" })).toBe("women")
+    })
 })
 
 describe("enforceLength", () => {

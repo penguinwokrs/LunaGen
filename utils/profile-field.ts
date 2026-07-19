@@ -69,8 +69,8 @@ export function resolveAudience(myRaw: any): Audience {
         .map((s) => s.trim())
     if (cs.includes("1")) return "women"
     if (cs.includes("2")) return "men"
-    // フォールバック: 自分の性別から推定
-    if (myRaw?.sex === 1) return "men"
+    // フォールバック: 自分の性別から推定（APIが文字列で返す場合に備えNumber経由）
+    if (Number(myRaw?.sex) === 1) return "men"
     return "women"
 }
 

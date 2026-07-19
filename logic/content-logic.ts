@@ -63,6 +63,10 @@ export async function getMyProfileRaw(): Promise<string | null> {
 
         const data = await res.json()
         const profileData = data.profile || data.user || data
+        // 他の書き込み経路と同様に、抽出可能な実データのときだけキャッシュする。
+        // 無検証で保存すると異常ボディが恒久キャッシュされ、需給判定まで汚染する。
+        const text = extractProfileFromJSON(profileData, data)
+        if (!text || text.length <= 10) return null
         const raw = JSON.stringify(profileData)
         await storage.set("myProfileRaw", raw)
         return raw
