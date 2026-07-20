@@ -86,14 +86,13 @@ export const FOCUS_TOPIC_INSTRUCTION = `# 優先話題（最重要・ユーザ�
 - 入力文そのものをそのままコピーせず、話題の起点として自然に発展させること
 - 文字数・禁止事項・トーン等、他のすべての制約はこれまで通り維持する`
 
+// 2026-07-20 実測: 1.5系と gemini-3-pro-preview は 404（提供終了）のため除外。
+// gemini-2.5-pro は「新規ユーザーには提供終了」だが既存プロジェクトでは使える場合があるため残す。
 export const GEMINI_MODELS = [
     "gemini-3.5-flash",
     "gemini-2.5-flash",
-    "gemini-2.5-pro",
     "gemini-3-flash-preview",
-    "gemini-3-pro-preview",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
+    "gemini-2.5-pro",
 ];
 
 export const OPENAI_MODELS = [

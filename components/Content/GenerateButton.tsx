@@ -16,13 +16,15 @@ interface GenerateButtonProps {
 export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
     const [loading, setLoading] = useState(false)
     const [slow, setSlow] = useState(false)
-    const [error, setError] = useState(false)
+    // エラーは「有無」ではなく実際のメッセージを保持する。
+    // 固定文言だと安全フィルタのブロックなのかキー不備なのか切り分けられない。
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         let timer: NodeJS.Timeout
         if (loading) {
             setSlow(false)
-            setError(false)
+            setError(null)
             timer = setTimeout(() => {
                 setSlow(true)
             }, 5000)
@@ -34,7 +36,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
         e.preventDefault()
         e.stopPropagation()
         setLoading(true)
-        setError(false)
+        setError(null)
 
         // メッセージ入力欄に書かれた内容を「優先して掘り下げたい話題」として拾う。
         // 生成結果で上書きされる前に読み取っておく。
@@ -142,18 +144,22 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
 
             if (response && response.error) {
                 await addLog("error", `AI Generation Error: ${response.error}`, { error: response.error }, "CONTENT")
-                setError(true)
+                setError(response.error)
             } else if (response && response.text) {
                 await addLog("info", "AI Generation Success", null, "CONTENT")
                 insertText(textarea, response.text)
-                setError(false)
+                setError(null)
             } else {
                 await addLog("error", "AI Generation Invalid Response", { response }, "CONTENT")
-                setError(true)
+                setError("AIから応答がありませんでした。設定画面のログをご確認ください。")
             }
         } catch (err: any) {
-            await addLog("error", "AI Generation Exception", { error: err.toString() }, "CONTENT")
-            setError(true)
+            // 拡張の更新直後などは sendMessage 自体が失敗する
+            const msg = /context invalidated/i.test(err?.message || "")
+                ? "拡張機能が更新されました。ページを再読み込みしてからお試しください。"
+                : (err?.message || String(err))
+            await addLog("error", "AI Generation Exception", { error: err?.toString() }, "CONTENT")
+            setError(msg)
         } finally {
             setLoading(false)
         }
@@ -165,7 +171,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
         if (loading) return
         // 各種イベントを発火させてサイト側の状態も空にする
         insertText(textarea, "")
-        setError(false)
+        setError(null)
     }
 
     return (
@@ -213,8 +219,17 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 </button>
             </div>
             {error && !loading && (
-                <p style={{ color: "#f44336", fontSize: "10px", margin: "4px 0 0 4px", fontWeight: "bold" }}>
-                    通信エラーが発生した可能性があります。
+                <p
+                    style={{
+                        color: "#f44336",
+                        fontSize: "11px",
+                        margin: "4px 0 0 4px",
+                        fontWeight: "bold",
+                        maxWidth: "420px",
+                        lineHeight: 1.5,
+                        whiteSpace: "pre-wrap"
+                    }}>
+                    ⚠️ {error}
                 </p>
             )}
         </div>
