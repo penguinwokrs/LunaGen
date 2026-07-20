@@ -1,5 +1,5 @@
 /**
- * プロフィール生成の実LLM評価ハーネス（test-quality.mjs のプロフィール版）
+ * プロフィール生成の実LLM評価ハーネス
  *
  * 本番と同じ buildProfilePrompt / 400字リトライ / 嗜好保全リトライ /
  * safetySettings(BLOCK_NONE) を使い、実プロフィール+合成プロフィールで
@@ -8,8 +8,8 @@
  * 前提: ~/.gemini_api_key にAPIキー（このファイルはコミットしない）
  * 実プロフィール(me.json)があれば使い、無ければ合成プロフィールのみで実行。
  *
- * 実行:
- *   pnpm exec esbuild test-profile-quality.ts --bundle --packages=external \
+ * 実行: リポジトリルートから実行すること（出力先パスがルート相対のため）
+ *   pnpm exec esbuild evals/test-profile-quality.ts --bundle --packages=external \
  *     --platform=node --format=esm --outfile=test-results/profile-eval/eval.bundle.mjs
  *   node test-results/profile-eval/eval.bundle.mjs
  * モデル変更: EVAL_MODEL=gemini-2.5-flash node test-results/profile-eval/eval.bundle.mjs
@@ -18,8 +18,8 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { generateText } from "ai"
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
 
-import { replacementRules } from "./assets/replacement_rules"
-import { PROFILE_TASTES } from "./profile-prompts"
+import { replacementRules } from "../assets/replacement_rules"
+import { PROFILE_TASTES } from "../profile-prompts"
 import {
     buildProfilePrompt,
     checkKinkPreservation,
@@ -27,7 +27,7 @@ import {
     resolveAudience,
     type ProfileFieldType,
     type TasteId
-} from "./utils/profile-field"
+} from "../utils/profile-field"
 
 const OUT_DIR = "test-results/profile-eval"
 mkdirSync(OUT_DIR, { recursive: true })
@@ -286,7 +286,7 @@ ${outputs.map((o) => `## 案${o.taste}\n${o.text}`).join("\n\n")}
 }
 
 // ---- メイン ----
-import { extractProfileFromJSON } from "./utils/profile"
+import { extractProfileFromJSON } from "../utils/profile"
 
 const results: any[] = []
 for (const subject of SUBJECTS) {
