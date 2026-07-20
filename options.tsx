@@ -17,7 +17,8 @@ const syncStorage = new Storage({ area: "sync" })
 export default function Options() {
   const [aiProvider, setAiProvider] = useStorage({ key: "aiProvider", instance: storage }, "gemini")
   const [geminiApiKey, setGeminiApiKey] = useStorage({ key: "geminiApiKey", instance: syncStorage }, "")
-  const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-1.5-flash")
+  // background.ts の既定値と揃える。gemini-1.5-flash は提供終了(404)のため既定にしない
+  const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-2.5-flash")
   const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: syncStorage }, "")
   const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
   const [geminiModelList, setGeminiModelList] = useStorage<string[]>({ key: "geminiModelList", instance: storage }, [])

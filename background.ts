@@ -4,6 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
 import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, FOCUS_TOPIC_INSTRUCTION, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
+import { describeAiError } from "./utils/ai-error"
 import { addLog } from "./utils/logger"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -385,6 +386,8 @@ async function generateWithGemini(prompt: string, model: string) {
       })
 
       if (!text) {
+        // 安全フィルタで中断された場合、SDKは例外を投げず空文字を返す。
+        // finishReason を文面に残し、下の catch で安全ブロックとして扱えるようにする。
         await logBG("error", "Gemini generated empty text", { finishReason })
         throw new Error(`Gemini generated no text. (FinishReason: ${finishReason})`)
       }
@@ -392,6 +395,11 @@ async function generateWithGemini(prompt: string, model: string) {
       return { text }
 
     } catch (e: any) {
+      const described = describeAiError(e)
+      // 「Invalid JSON response」等の中身の無いメッセージだけで終わらせず、
+      // statusCode / responseBody / cause まで残す（原因特定に必須）
+      await logBG("error", `Gemini call failed: ${described.message}`, described.detail)
+
       const isOverloaded = e.message?.includes("503") || e.message?.includes("Overloaded")
       if (isOverloaded && retries < maxRetries) {
         retries++
@@ -403,7 +411,16 @@ async function generateWithGemini(prompt: string, model: string) {
       if (isOverloaded) {
         throw new Error("サーバーが現在混雑しています (503 Overloaded)。時間をおいて試すか、オプション画面でモデルを変更してください。")
       }
-      throw e
+
+      // 安全フィルタのブロックは判定が揺れることがあるため一度だけ再試行し、
+      // それでも駄目なら原因と対処が分かるメッセージにして返す。
+      if (described.isSafetyBlock && retries < 1) {
+        retries++
+        await logBG("warn", `Gemini safety block (${described.detail.blockReason}). Retrying once...`)
+        continue
+      }
+
+      throw new Error(described.message)
     }
   }
 
@@ -415,28 +432,41 @@ async function generateWithOpenAI(prompt: string, model: string, maxOutputTokens
 
   const openai = createOpenAI({ apiKey })
 
-  const { text } = await generateText({
-    model: openai(model),
-    system: "You are a helpful assistant.",
-    prompt,
-    maxOutputTokens,
-  })
+  try {
+    const { text } = await generateText({
+      model: openai(model),
+      system: "You are a helpful assistant.",
+      prompt,
+      maxOutputTokens,
+    })
 
-  return { text: text || "" }
+    return { text: text || "" }
+  } catch (e: any) {
+    const described = describeAiError(e)
+    await logBG("error", `OpenAI call failed: ${described.message}`, described.detail)
+    throw new Error(described.message)
+  }
 }
 
 async function generateWithOllama(prompt: string, model: string, baseURL: string) {
   const ollama = createOpenAI({ baseURL: `${baseURL}/v1`, apiKey: "ollama" })
 
-  const { text, finishReason } = await generateText({
-    model: ollama(model),
-    prompt,
-  })
+  try {
+    const { text, finishReason } = await generateText({
+      model: ollama(model),
+      prompt,
+    })
 
-  if (!text) {
-    await logBG("error", "Ollama generated empty text", { finishReason })
-    throw new Error(`Ollama generated no text. (FinishReason: ${finishReason})`)
+    if (!text) {
+      await logBG("error", "Ollama generated empty text", { finishReason })
+      throw new Error(`Ollama generated no text. (FinishReason: ${finishReason})`)
+    }
+
+    return { text }
+  } catch (e: any) {
+    if (/Ollama generated no text/.test(e?.message || "")) throw e
+    const described = describeAiError(e)
+    await logBG("error", `Ollama call failed: ${described.message}`, described.detail)
+    throw new Error(described.message)
   }
-
-  return { text }
 }
