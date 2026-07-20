@@ -49,6 +49,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      # リリースのゲート。ここが赤ならタグもリリースも作られない。
+      # test.yml と同じ内容だが、PR経由せず main に直接 push された場合でも
+      # 無検証で公開されないよう、リリース経路にも独立して置く。
+      - name: Type check
+        run: pnpm exec tsc --noEmit
+
+      - name: Unit tests
+        run: pnpm test
+
       - name: Build and Package
         # Build with the new version in package.json
         run: |
