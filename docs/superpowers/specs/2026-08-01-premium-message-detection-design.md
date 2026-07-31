@@ -38,11 +38,18 @@ const isPremium = document.body.innerText.includes("プレミアムメッセー�
 
 - 判定式: `maxLength >= 300` を premium とする。
   - 300 は実測値 200 と 500 の中間。属性なしの `-1` も自然に除外される。
-- 判定は `utils/premium.ts` の純関数 `isPremiumInput(maxLength: number): boolean` として切り出し、
-  `GenerateButton` からは `isPremiumInput(textarea.maxLength)` を呼ぶだけにする（ユニットテスト可能にするため）。
-- 実在しない文字列一致（`document.body.innerText.includes(...)`）は削除する。
-  「念のため OR で残す」はしない。実サイトに無い文字列であることを実測で確認済みで、
-  残すと将来の読み手に「これで判定できている」と誤解させるため。
+- 上限が明示されていない入力欄（`maxLength <= 0`）に限り、囲んでいるダイアログのテキストに
+  `プレミアムメッセージ` が含まれるかをフォールバックとして見る。
+  - この語はプレミアム入力欄の案内文「プレミアムメッセージはあなたの想いを…100文字以上必要です」に実在し、
+    メッセージ付きいいね欄（案内文は「メッセージ付きいいね」）とマッチ後スレッドには無い。
+  - 上限が明示されている場合は maxLength を優先する。文言を優先すると 200文字の欄をプレミアムと
+    誤判定し、生成文が切り詰められる。逆向きの誤り（プレミアム欄で短く生成）より実害が大きい。
+- 判定は `utils/premium.ts` の純関数
+  `isPremiumInput(maxLength: number, surroundingText?: string): boolean` として切り出し、
+  `GenerateButton` からは
+  `isPremiumInput(textarea.maxLength, textarea.closest("[role=dialog]")?.textContent ?? "")`
+  を呼ぶだけにする（ユニットテスト可能にするため）。
+- 実在しない文字列 `プレミアムメッセージを送る` による判定は削除する。
 
 `background.ts` 側の `isPremium` の受け渡し・意味づけは変更しない。
 
