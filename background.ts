@@ -5,6 +5,7 @@ import { Storage } from "@plasmohq/storage"
 import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, FOCUS_TOPIC_INSTRUCTION, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
+import { applyPremiumPrompt } from "./utils/premium"
 import { addLog } from "./utils/logger"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -146,15 +147,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   let prompt = promptTemplate
 
   if (isPremium) {
-    const premiumLimit = "文字数は句読点・記号・空白・改行すべて含めて合計490〜500文字（厳守。500文字を超えたら失格、480文字未満も失格。上限500を超えない範囲で、可能な限り500文字に近づけること）"
-    const normalLimit = "文字数は句読点・記号・空白・改行すべて含めて合計200文字以内（厳守。200文字を1文字でも超えたら失格）"
-    if (prompt.includes(normalLimit)) {
-      prompt = prompt.replace(normalLimit, premiumLimit)
-    } else {
-      prompt += `\n\n# 文字数制約（最重要）\n${premiumLimit}`
-    }
-    // Expand content: cover more matching points to naturally fill close to 500 chars
-    prompt += "\n\n# 内容の厚み（プレミアム）\n噛み合う点を2〜3個取り上げ、各点に自分の具体的な体験やエピソードを添えて掘り下げ、文字数が500に届く手前まで厚く書くこと。"
+    prompt = applyPremiumPrompt(prompt)
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
 
