@@ -6,6 +6,7 @@ import { extractProfileFromJSON } from "../../utils/profile"
 import { extractLookups, generateDemandSupplyHint } from "../../utils/demand-supply"
 import { formatChatHistory, resolveCachedHistory, resolveCachedPartner } from "../../utils/partner"
 import { getThreadIdFromUrl, getUserIdFromUrl } from "../../utils/url"
+import { isPremiumInput } from "../../utils/premium"
 
 const storage = new Storage({ area: "local" })
 
@@ -128,7 +129,12 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             }
 
             // 3. Generate Message
-            const isPremium = document.body.innerText.includes("プレミアムメッセージを送る")
+            // 生成対象の入力欄そのもので判定する。実測 maxlength は
+            // プレミアム=500 / メッセージ付きいいね=200 / マッチ後スレッド=-1(属性なし)。
+            const isPremium = isPremiumInput(
+                textarea.maxLength,
+                textarea.closest("[role=dialog]")?.textContent ?? ""
+            )
             await addLog("info", `Requesting generation (Premium: ${isPremium})`, { hasHistory: !!chatHistory }, "CONTENT")
 
             const response = await chrome.runtime.sendMessage({

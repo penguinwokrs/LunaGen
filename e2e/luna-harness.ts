@@ -96,13 +96,10 @@ function profileHtml() {
       var ta = document.createElement("textarea");
       ta.id = "message-input";
       ta.placeholder = "メッセージを入力";
+      // プレミアム判定は入力欄の maxlength で行う
+      // (実サイト実測: プレミアムメッセージ=500 / メッセージ付きいいね=200)
+      ta.maxLength = new URLSearchParams(location.search).get("premium") ? 500 : 200;
       form.appendChild(ta);
-      // ?premium=1 のときはプレミアム判定用テキストを置く
-      if (new URLSearchParams(location.search).get("premium")) {
-        var p = document.createElement("p");
-        p.textContent = "プレミアムメッセージを送る";
-        document.body.appendChild(p);
-      }
       document.getElementById("app").appendChild(form);
     }, 150);
   </script>
