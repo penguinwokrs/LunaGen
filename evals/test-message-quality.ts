@@ -73,16 +73,30 @@ async function gen(prompt: string, model: string = MODEL): Promise<string> {
 
 // ===== 自動チェック（決定論） =====
 
-/** 素材外の逃げ先として実際に混入した語。見つけ次第ここに追加する。 */
-const OFF_TOPIC_WORDS = [
-  "食事", "ご飯", "ごはん", "グルメ", "料理", "レストラン", "カフェ",
-  "ランチ", "ディナー", "お酒", "居酒屋", "飲みに",
-  // 「食べ」の語幹で活用形（食べに行き／食べるの等）をまとめて拾う
-  "食べ",
-  // 名前「ぴの」からの連想バグ（修正A）で実際に生成された語
-  "アイス",
-  "スイーツ", "デザート", "甘いもの", "コーヒー", "お茶",
-  "焼肉", "ラーメン", "寿司", "一杯"
+/**
+ * 素材外の逃げ先として実際に混入した話題。見つけ次第ここに追加する。
+ *
+ * 語単位で「メッセージに在り、相手プロフィールに無い」を判定すると誤検出する。
+ * 2026-08-02 の実測では、相手が「食べるものまで主好みに染まりたい」と書いているのに
+ * メッセージ側の「食事」が語として一致せず、根拠のある発言を素材外と誤判定した。
+ * そこで話題をグループにし、根拠の有無は groundStems（表記ゆれを吸収する語幹）で見る。
+ */
+const OFF_TOPIC_GROUPS = [
+  {
+    name: "飲食",
+    words: [
+      "食事", "ご飯", "ごはん", "グルメ", "料理", "レストラン", "カフェ",
+      "ランチ", "ディナー", "お酒", "居酒屋", "飲みに",
+      // 「食べ」の語幹で活用形（食べに行き／食べるの等）をまとめて拾う
+      "食べ",
+      // 名前「ぴの」からの連想バグで実際に生成された語
+      "アイス",
+      "スイーツ", "デザート", "甘いもの", "コーヒー", "お茶",
+      "焼肉", "ラーメン", "寿司", "一杯"
+    ],
+    // 相手プロフィールにこれらのいずれかがあれば、飲食の話題には根拠がある
+    groundStems: ["食", "飲", "グルメ", "料理", "カフェ", "酒", "スイーツ", "甘いもの", "お茶"]
+  }
 ]
 
 const BANNED_EXPRESSIONS = [
@@ -113,9 +127,14 @@ function endsWithQuestion(message: string): boolean {
 }
 
 function checkMessage(message: string, targetProfileText: string, ngText: string): Checks {
-  const offTopic = OFF_TOPIC_WORDS.filter(
-    (w) => message.includes(w) && !targetProfileText.includes(w)
-  )
+  // グループごとに根拠の有無を見る。相手プロフィールがそのグループに触れていれば、
+  // メッセージ側でどの語を使っても素材外ではない（表記ゆれで誤検出しないため）。
+  const offTopic: string[] = []
+  for (const group of OFF_TOPIC_GROUPS) {
+    const grounded = group.groundStems.some((s) => targetProfileText.includes(s))
+    if (grounded) continue
+    offTopic.push(...group.words.filter((w) => message.includes(w)))
+  }
   const ngTerms = ngText.split(/[、。,\s]+/).map((s) => s.trim()).filter((s) => s.length >= 2)
   // 内容語の近似: 2文字以上の漢字/カタカナ連続を content word とみなす
   const contentWords = [...message.matchAll(/[一-龠々]{2,}|[ァ-ヶー]{2,}/g)].map((m) => m[0])
@@ -152,7 +171,15 @@ ${message}
 
 以下のJSONのみを出力してください（説明不要）:
 {"replyIntent": 1〜5の整数（5=すぐ返信したい, 1=返信しない）, "feltRead": 1〜5の整数（5=自分のプロフィールを読んで書かれたと強く感じる）, "reason": "50字以内の理由"}`
-  const raw = await gen(prompt, JUDGE_MODEL)
+  // 審査プロンプトにも相手のプロフィール本文が入るため、安全フィルタで
+  // PROHIBITED_CONTENT ブロックが起きる（2026-08-02 実測、gemini-3.5-flash）。
+  // ここで例外を素通しすると評価全体が途中で落ちるので、判定失敗として扱う。
+  let raw: string
+  try {
+    raw = await gen(prompt, JUDGE_MODEL)
+  } catch (e: any) {
+    return { replyIntent: null, feltRead: null, reason: `api failed: ${String(e?.message ?? e).slice(0, 80)}`, parseFailed: true }
+  }
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim())
     return { replyIntent: parsed.replyIntent, feltRead: parsed.feltRead, reason: parsed.reason, parseFailed: false }
@@ -182,7 +209,13 @@ ${otherProfileText}
 ${message}
 
 JSONのみ出力: {"fitsThisPerson": true または false}`
-  const raw = await gen(prompt, JUDGE_MODEL)
+  // judgeAsRecipient と同じ理由で API エラーも判定失敗として扱う（評価全体を止めない）。
+  let raw: string
+  try {
+    raw = await gen(prompt, JUDGE_MODEL)
+  } catch {
+    return { fitsThisPerson: null, parseFailed: true }
+  }
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim())
     return { fitsThisPerson: parsed.fitsThisPerson === true, parseFailed: false }
@@ -226,7 +259,7 @@ for (const target of corpus) {
       myProfile: myProfileText,
       targetProfile: targetProfileText,
       // 「ぴの」を使う: 名前から食べ物（ピノ＝アイスの商品名）を連想する実害バグ（修正A）を
-      // このハーネスで再現・検出するため。旧プロンプトでは「アイス」等が出てOFF_TOPIC_WORDSに
+      // このハーネスで再現・検出するため。旧プロンプトでは「アイス」等が出て飲食グループの検出に
       // 引っかかり、新プロンプトでは出ないことが期待される挙動。
       targetName: "ぴの",
       demandSupplyHint: hint
