@@ -433,13 +433,19 @@ chrome.runtime.onInstalled.addListener(async () => {
   ]
 
   for (const { key, legacy, next } of targets) {
-    const stored = await storage.get<string>(key)
-    const migrated = migratePrompt(stored, legacy, next)
-    if (migrated !== null) {
-      await storage.set(key, migrated)
-      await logBG("info", `Prompt migrated to new default: ${key}`)
-    } else {
-      await logBG("info", `Prompt kept (user-edited): ${key}`)
+    try {
+      const stored = await storage.get<string>(key)
+      const migrated = migratePrompt(stored, legacy, next)
+      if (migrated !== null) {
+        await storage.set(key, migrated)
+        await logBG("info", `Prompt migrated to new default: ${key}`)
+      } else if (stored === next) {
+        await logBG("info", `Prompt already up to date: ${key}`)
+      } else {
+        await logBG("info", `Prompt kept (user-edited): ${key}`)
+      }
+    } catch (err: any) {
+      await logBG("error", `Prompt migration failed: ${key}`, { error: err.message })
     }
   }
 })
