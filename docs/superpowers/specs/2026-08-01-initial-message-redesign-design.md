@@ -201,6 +201,10 @@ LLM は200字を埋めようとして捏造か無難話題に走る。
   それぞれ最低10件入るまで収集する。柱5のフォールバックを検証するため、薄い相手が必須。
 - 目標50件程度
 
+**取り扱い**: コーパスは他人の実プロフィールである。匿名化して `test-results/`（gitignore 配下）にのみ置き、
+**評価が完了したら削除する**。収集スクリプトと評価ハーネスはコミットするので、必要になれば再収集できる。
+削除手順は両スクリプトのヘッダーコメントに明記する。
+
 ### 生成品質の評価
 
 `evals/test-message-quality.ts`（新規）。`evals/test-profile-quality.ts` を手本にする。
@@ -256,14 +260,33 @@ LLM は200字を埋めようとして捏造か無難話題に走る。
 | `constants.ts` | `DEFAULT_PROMPT` を差し替え。`CONTINUOUS_CONVERSATION_PROMPT` の参照1箇所を追随 |
 | `utils/demand-supply.ts` | `formatDemandSupplyHint` を2ブロック分割。生活条件軸の `talkingPoint` を前提向けに書き換え |
 | `utils/demand-supply.test.ts` | 上記のテストを追加 |
-| `background.ts` | 注入セクション見出しを `# プロフィール項目の突き合わせ` に変更 |
+| `background.ts` | 注入セクション見出しを `# プロフィール項目の突き合わせ` に変更。`onInstalled` にプロンプト移行を追加 |
+| `utils/prompt-migration.ts` | 新規。未編集判定と移行の純粋関数 |
+| `utils/prompt-migration.test.ts` | 新規 |
+| `README.md` | 編集済みユーザーは「デフォルトに戻す」で新プロンプトを取得できる旨を追記 |
 | `evals/collect-partner-corpus.mjs` | 新規。コーパス収集 |
 | `evals/test-message-quality.ts` | 新規。品質評価ハーネス |
 
-`options.tsx` のプロンプト初期値は `DEFAULT_PROMPT` を参照しているため自動追随する。
-ただし**既にプロンプトを保存済みのユーザーは storage 側の旧プロンプトが使われ続ける**。
-設定画面の「デフォルトに戻す」を押してもらう必要がある。移行処理は入れない
-（ユーザーが自分で編集した内容を勝手に上書きしないため）。README にこの点を1行追記する。
+### 既存ユーザーの移行
+
+`options.tsx` のプロンプト初期値は `DEFAULT_PROMPT` を参照するため、**未保存**のユーザーは自動で新しくなる。
+問題は既に storage に保存済みのユーザーで、放置すると旧プロンプトが使われ続ける。
+
+**未編集なら自動追従する**方式を採る。
+
+- 旧プロンプトを `constants.ts` に `LEGACY_DEFAULT_PROMPT_V1` / `LEGACY_CONTINUOUS_PROMPT_V1` として残す
+- `background.ts` の `chrome.runtime.onInstalled`（`reason === "update"` および `"install"`）で移行を実行する
+  - `promptTemplate` が未設定、または `LEGACY_DEFAULT_PROMPT_V1` と**完全一致**する場合のみ `DEFAULT_PROMPT` に更新する
+  - `continuousPromptTemplate` も同様に `LEGACY_CONTINUOUS_PROMPT_V1` と完全一致する場合のみ更新する
+    （柱1の見出し変更で1行だけ変わるため、こちらも移行対象）
+  - 一致しなければ**何もしない**。ユーザーが編集した内容は絶対に上書きしない
+- 移行の実行有無を `logBG` に記録する（効かなかったときに切り分けられるようにする）
+- 判定は `utils/prompt-migration.ts` の純粋関数
+  `migratePrompt(stored: string | undefined, legacy: string, next: string): string | null`
+  として切り出し、更新不要なら `null` を返す。`utils/prompt-migration.test.ts` でテストする
+
+自分で編集した人には届かないため、設定画面の「デフォルトに戻す」で新プロンプトを取得できる旨を
+README に1行追記する。
 
 ## やらないこと
 
