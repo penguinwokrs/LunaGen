@@ -15,12 +15,17 @@
  *   pnpm exec esbuild evals/test-message-quality.ts --bundle --packages=external \
  *     --platform=node --format=esm --outfile=test-results/message-eval/eval.bundle.mjs
  *   node test-results/message-eval/eval.bundle.mjs
- * モデル変更: EVAL_MODEL=gemini-2.5-pro node test-results/message-eval/eval.bundle.mjs
+ * モデル変更:
+ *   EVAL_MODEL=gemini-2.5-pro       … 生成に使うモデル
+ *   EVAL_JUDGE_MODEL=gemini-2.5-pro … 審査（返信意欲・汎用性）に使うモデル
  *
- * EVAL_MODEL の既定値について:
- *   拡張本体の既定モデル（background.ts / options.tsx）は gemini-2.5-flash。
- *   評価ハーネスもこれに合わせてある。本番ユーザーが実際に体験する挙動を測るのが
- *   目的のため、恣意的に別モデルを既定にしない。
+ * モデルの既定値について（2026-08-02 オーナー指示）:
+ *   生成・審査とも gemini-3.5-flash 以上を既定とする。gemini-2.5-flash は
+ *   置換ルールの実API検証（evals/verify-replacement-rules.ts）で、BLOCK_NONE 下では
+ *   陽性対照すらブロックしないなど判定材料として当てにならない挙動が確認されている。
+ *   注意: 拡張本体の既定モデル（background.ts / options.tsx）は gemini-2.5-flash のままなので、
+ *   この評価結果は「3.5-flash を選んだユーザーが体験する挙動」であり、既定のままの
+ *   ユーザーの体験とは一致しない。
  *
  * 既知の制約（今回は未修正。コーパスのスキーマ拡張が必要）:
  *   generateDemandSupplyHint(myRaw, target, {}) は空の lookups で呼んでいるため、
@@ -46,8 +51,9 @@ mkdirSync(OUT_DIR, { recursive: true })
 
 const apiKey = readFileSync(process.env.HOME + "/.gemini_api_key", "utf8").trim()
 const google = createGoogleGenerativeAI({ apiKey })
-// 拡張本体の既定モデル（background.ts / options.tsx）に合わせる。理由はファイル冒頭コメント参照。
-const MODEL = process.env.EVAL_MODEL || "gemini-2.5-flash"
+// 生成用と審査用でモデルを分ける。既定はどちらも 3.5-flash。理由はファイル冒頭コメント参照。
+const MODEL = process.env.EVAL_MODEL || "gemini-3.5-flash"
+const JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL || "gemini-3.5-flash"
 const log = (...a: any[]) => console.log("[eval]", ...a)
 
 const SAFETY = [
@@ -57,9 +63,9 @@ const SAFETY = [
   { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
 ] as const
 
-async function gen(prompt: string): Promise<string> {
+async function gen(prompt: string, model: string = MODEL): Promise<string> {
   const { text } = await generateText({
-    model: google(MODEL),
+    model: google(model),
     prompt,
     providerOptions: { google: { safetySettings: SAFETY } as any }
   })
@@ -147,7 +153,7 @@ ${message}
 
 以下のJSONのみを出力してください（説明不要）:
 {"replyIntent": 1〜5の整数（5=すぐ返信したい, 1=返信しない）, "feltRead": 1〜5の整数（5=自分のプロフィールを読んで書かれたと強く感じる）, "reason": "50字以内の理由"}`
-  const raw = await gen(prompt)
+  const raw = await gen(prompt, JUDGE_MODEL)
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim())
     return { replyIntent: parsed.replyIntent, feltRead: parsed.feltRead, reason: parsed.reason, parseFailed: false }
@@ -177,7 +183,7 @@ ${otherProfileText}
 ${message}
 
 JSONのみ出力: {"fitsThisPerson": true または false}`
-  const raw = await gen(prompt)
+  const raw = await gen(prompt, JUDGE_MODEL)
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim())
     return { fitsThisPerson: parsed.fitsThisPerson === true, parseFailed: false }
@@ -189,7 +195,7 @@ JSONのみ出力: {"fitsThisPerson": true または false}`
 // ===== メイン =====
 
 const corpus = JSON.parse(readFileSync(CORPUS, "utf8")).users as any[]
-log(`corpus: ${corpus.length} 件, model=${MODEL}`)
+log(`corpus: ${corpus.length} 件, 生成=${MODEL}, 審査=${JUDGE_MODEL}`)
 
 // 自分のプロフィールは固定。実データがあれば使う
 let myRaw: any = { age: 35, area: "13", my_type: "A", q_sex: 4, profile: "評価用の自分プロフィール" }
@@ -363,7 +369,9 @@ const mechanicalVerdict = fresh.inconclusive
 
 const report = `# 初回メッセージ生成 評価レポート
 
-model: ${MODEL} / corpus: ${corpus.length} 件 / 生成日時: ${new Date().toISOString()}
+生成モデル: ${MODEL} / 審査モデル: ${JUDGE_MODEL} / corpus: ${corpus.length} 件 / 生成日時: ${new Date().toISOString()}
+
+※ 拡張本体の既定モデルは gemini-2.5-flash。この評価は上記モデルでの挙動を測ったもの。
 
 ${legacy.inconclusive ? "⚠️ 旧プロンプトは評価件数0件のため判定不能（INCONCLUSIVE）です。\n" : ""}${fresh.inconclusive ? "⚠️ 新プロンプトは評価件数0件のため判定不能（INCONCLUSIVE）です。\n" : ""}
 | 指標 | 旧プロンプト | 新プロンプト |
