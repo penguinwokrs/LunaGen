@@ -20,7 +20,7 @@ export const PromptTemplateSection = ({
     return (
         <section style={{ marginBottom: "30px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h2 style={{ fontSize: "1.2rem" }}>3. プロンプトテンプレート</h2>
+                <h2 style={{ fontSize: "1.2rem" }}>2. プロンプトテンプレート</h2>
                 <button
                     onClick={() => {
                         onReset()

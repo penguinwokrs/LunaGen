@@ -36,7 +36,7 @@ export const ReplacementRulesSection = ({ enabled, setEnabled, rules, setRules }
     return (
         <Section title="">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h2 style={{ fontSize: "1.2rem", margin: 0 }}>辞書（文字の置き換え）</h2>
+                <h2 style={{ fontSize: "1.2rem", margin: 0 }}>4. 辞書（文字の置き換え）</h2>
                 <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                     <span style={{ fontSize: "0.85rem", color: "#666" }}>{enabled ? "有効" : "無効"}</span>
                     <div

@@ -7,9 +7,11 @@ import { DebugLogsSection } from "./components/Options/DebugLogsSection"
 import { MyProfileSection } from "./components/Options/MyProfileSection"
 import { PromptTemplateSection } from "./components/Options/PromptTemplateSection"
 import { ReplacementRulesSection, type ReplacementRule } from "./components/Options/ReplacementRulesSection"
+import { TonePresetSection } from "./components/Options/TonePresetSection"
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, DEFAULT_TONE_PRESETS } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
+import { NO_TONE, type TonePreset } from "./utils/tone"
 
 const storage = new Storage({ area: "local" })
 const syncStorage = new Storage({ area: "sync" })
@@ -35,6 +37,8 @@ export default function Options() {
   const [myProfileUpdatedAt, setMyProfileUpdatedAt] = useStorage({ key: "myProfileUpdatedAt", instance: storage }, "")
   const [replacementRulesEnabled, setReplacementRulesEnabled] = useStorage({ key: "replacementRulesEnabled", instance: storage }, true)
   const [replacementRules, setReplacementRules] = useStorage<ReplacementRule[]>({ key: "replacementRules", instance: storage }, defaultReplacementRules as ReplacementRule[])
+  const [tonePresets, setTonePresets] = useStorage<TonePreset[]>({ key: "tonePresets", instance: storage }, DEFAULT_TONE_PRESETS as TonePreset[])
+  const [defaultToneId, setDefaultToneId] = useStorage({ key: "defaultToneId", instance: storage }, NO_TONE)
   const [isDebugEnabled, setIsDebugEnabled] = useStorage({ key: "isDebugEnabled", instance: storage }, process.env.NODE_ENV === "development")
   const [debugLogs, setDebugLogs] = useStorage<any[]>({ key: "debugLogs", instance: storage }, [])
 
@@ -193,6 +197,17 @@ export default function Options() {
         onReset={() => {
           setPromptTemplate(DEFAULT_PROMPT)
           setContinuousPromptTemplate(CONTINUOUS_CONVERSATION_PROMPT)
+        }}
+      />
+
+      <TonePresetSection
+        presets={tonePresets}
+        setPresets={setTonePresets}
+        defaultToneId={defaultToneId}
+        setDefaultToneId={setDefaultToneId}
+        onReset={() => {
+          setTonePresets(DEFAULT_TONE_PRESETS as TonePreset[])
+          setDefaultToneId(NO_TONE)
         }}
       />
 

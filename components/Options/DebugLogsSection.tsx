@@ -23,7 +23,7 @@ export const DebugLogsSection = ({
             opacity: isDebugEnabled ? 1 : 0.8
         }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "15px", borderBottom: "1px solid #ccc", paddingBottom: "10px" }}>
-                <h2 style={{ fontSize: "1.2rem", margin: 0 }}>4. デバッグログ設定</h2>
+                <h2 style={{ fontSize: "1.2rem", margin: 0 }}>5. デバッグログ設定</h2>
                 <div style={{ display: "flex", gap: "15px", alignItems: "center", backgroundColor: "#fff", padding: "5px 15px", borderRadius: "20px", border: "1px solid #ddd" }}>
                     <label style={{ display: "flex", alignItems: "center", cursor: "pointer", fontSize: "0.9rem" }}>
                         <input
