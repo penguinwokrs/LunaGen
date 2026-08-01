@@ -17,8 +17,10 @@ const syncStorage = new Storage({ area: "sync" })
 export default function Options() {
   const [aiProvider, setAiProvider] = useStorage({ key: "aiProvider", instance: storage }, "gemini")
   const [geminiApiKey, setGeminiApiKey] = useStorage({ key: "geminiApiKey", instance: syncStorage }, "")
-  // background.ts の既定値と揃える。gemini-1.5-flash は提供終了(404)のため既定にしない
-  const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-2.5-flash")
+  // background.ts の既定値と揃える。gemini-1.5-flash は提供終了(404)のため既定にしない。
+  // 2026-08-02: 2.5-flash から 3.5-flash へ変更。2.5-flash は置換ルールの実API検証で
+  // BLOCK_NONE 下では陽性対照すらブロックしないなど挙動が読めず、評価も 3.5-flash で行うため。
+  const [geminiModel, setGeminiModel] = useStorage({ key: "geminiModel", instance: storage }, "gemini-3.5-flash")
   const [openaiApiKey, setOpenaiApiKey] = useStorage({ key: "openaiApiKey", instance: syncStorage }, "")
   const [openaiModel, setOpenaiModel] = useStorage({ key: "openaiModel", instance: storage }, "gpt-4o")
   const [geminiModelList, setGeminiModelList] = useStorage<string[]>({ key: "geminiModelList", instance: storage }, [])

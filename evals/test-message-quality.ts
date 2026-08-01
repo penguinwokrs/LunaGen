@@ -23,9 +23,8 @@
  *   生成・審査とも gemini-3.5-flash 以上を既定とする。gemini-2.5-flash は
  *   置換ルールの実API検証（evals/verify-replacement-rules.ts）で、BLOCK_NONE 下では
  *   陽性対照すらブロックしないなど判定材料として当てにならない挙動が確認されている。
- *   注意: 拡張本体の既定モデル（background.ts / options.tsx）は gemini-2.5-flash のままなので、
- *   この評価結果は「3.5-flash を選んだユーザーが体験する挙動」であり、既定のままの
- *   ユーザーの体験とは一致しない。
+ *   拡張本体の既定モデル（background.ts / options.tsx）も同日 gemini-3.5-flash に
+ *   変更したため、評価結果は既定設定のユーザーが体験する挙動と一致する。
  *
  * 既知の制約（今回は未修正。コーパスのスキーマ拡張が必要）:
  *   generateDemandSupplyHint(myRaw, target, {}) は空の lookups で呼んでいるため、
@@ -371,7 +370,7 @@ const report = `# 初回メッセージ生成 評価レポート
 
 生成モデル: ${MODEL} / 審査モデル: ${JUDGE_MODEL} / corpus: ${corpus.length} 件 / 生成日時: ${new Date().toISOString()}
 
-※ 拡張本体の既定モデルは gemini-2.5-flash。この評価は上記モデルでの挙動を測ったもの。
+※ 拡張本体の既定モデルも gemini-3.5-flash。この評価は既定設定のユーザーの挙動を測ったもの。
 
 ${legacy.inconclusive ? "⚠️ 旧プロンプトは評価件数0件のため判定不能（INCONCLUSIVE）です。\n" : ""}${fresh.inconclusive ? "⚠️ 新プロンプトは評価件数0件のため判定不能（INCONCLUSIVE）です。\n" : ""}
 | 指標 | 旧プロンプト | 新プロンプト |

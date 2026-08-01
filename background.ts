@@ -110,7 +110,7 @@ async function generateWithConfiguredProvider(
       return await generateWithOllama(prompt, model, `http://${host}:${port}`)
     }
     case "gemini": {
-      const model = await storage.get("geminiModel") || "gemini-2.5-flash"
+      const model = await storage.get("geminiModel") || "gemini-3.5-flash"
       return await generateWithGemini(prompt, model)
     }
     case "openai": {
