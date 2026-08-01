@@ -7,6 +7,7 @@
  */
 import { FOCUS_TOPIC_INSTRUCTION } from "../constants"
 import { applyPremiumPrompt } from "./premium"
+import { injectToneBlock } from "./tone"
 
 /** 分析セクションの見出し */
 export const ANALYSIS_SECTION_HEADING = "# プロフィール項目の突き合わせ"
@@ -23,6 +24,8 @@ export interface BuildMessagePromptInput {
   demandSupplyHint?: string
   focusTopic?: string
   isPremium?: boolean
+  /** 口調の指示文。null / 未指定なら口調ブロックを足さない */
+  toneInstruction?: string | null
 }
 
 export function buildMessagePrompt({
@@ -33,7 +36,8 @@ export function buildMessagePrompt({
   chatHistory,
   demandSupplyHint,
   focusTopic,
-  isPremium
+  isPremium,
+  toneInstruction
 }: BuildMessagePromptInput): string {
   let prompt = template
 
@@ -74,6 +78,8 @@ export function buildMessagePrompt({
       ? prompt.replace(TARGET_PROFILE_MARKER, `${analysisBlock}\n\n${TARGET_PROFILE_MARKER}`)
       : `${prompt}\n\n${analysisBlock}`
   }
+
+  prompt = injectToneBlock(prompt, toneInstruction ?? null)
 
   return prompt
 }

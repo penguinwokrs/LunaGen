@@ -2,12 +2,13 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1 } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, DEFAULT_TONE_PRESETS } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
 import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
 import { addLog } from "./utils/logger"
 import { migratePrompt } from "./utils/prompt-migration"
+import { resolveToneInstruction, type TonePreset } from "./utils/tone"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
 
@@ -134,7 +135,7 @@ function pickNearCap(a: { text: string }, b: { text: string }, cap: number) {
   return aLen <= bLen ? a : b
 }
 
-async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, demandSupplyHint, focusTopic }: any) {
+async function handleGenerateMessage({ myProfile, targetProfile, targetName, chatHistory, isPremium, demandSupplyHint, focusTopic, toneId }: any) {
   const aiProvider = await storage.get("aiProvider") || "gemini"
 
   let promptTemplate = ""
@@ -145,6 +146,13 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     promptTemplate = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
   }
 
+  const tonePresets =
+    (await storage.get<TonePreset[]>("tonePresets")) || (DEFAULT_TONE_PRESETS as TonePreset[])
+  const toneInstruction = resolveToneInstruction(toneId, tonePresets)
+  if (toneInstruction) {
+    await logBG("info", `Tone applied: ${toneId}`)
+  }
+
   let prompt = buildMessagePrompt({
     template: promptTemplate,
     myProfile,
@@ -153,7 +161,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     chatHistory,
     demandSupplyHint,
     focusTopic,
-    isPremium
+    isPremium,
+    toneInstruction
   })
 
   if (isPremium) {

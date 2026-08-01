@@ -95,6 +95,31 @@ describe("buildMessagePrompt: プレミアム", () => {
   })
 })
 
+describe("buildMessagePrompt: 口調", () => {
+  it("toneInstruction があれば末尾に口調ブロックを足す", () => {
+    const out = buildMessagePrompt({ ...base, toneInstruction: "敬体で書く" })
+    expect(out).toContain("# 口調の指定")
+    expect(out).toContain("敬体で書く")
+    expect(out.indexOf("# 口調の指定")).toBeGreaterThan(out.indexOf("# 相手のプロフィール"))
+  })
+
+  it("toneInstruction が無ければプロンプトを変えない", () => {
+    const withTone = buildMessagePrompt({ ...base, toneInstruction: null })
+    const without = buildMessagePrompt(base)
+    expect(withTone).toBe(without)
+  })
+
+  it("{tone_instruction} があればその位置に差し込む", () => {
+    const out = buildMessagePrompt({
+      ...base,
+      template: `冒頭\n{tone_instruction}\n\n# 自分のプロフィール\n{my_info_clean}\n\n# 相手のプロフィール\n{target_info_clean}`,
+      toneInstruction: "敬体で書く"
+    })
+    expect(out).not.toContain("{tone_instruction}")
+    expect(out.indexOf("敬体で書く")).toBeLessThan(out.indexOf("# 自分のプロフィール"))
+  })
+})
+
 describe("applyReplacementRules", () => {
   it("すべての出現箇所を置換する", () => {
     expect(applyReplacementRules("蝋燭と蝋燭", [{ from: "蝋燭", to: "温感" }])).toBe("温感と温感")
