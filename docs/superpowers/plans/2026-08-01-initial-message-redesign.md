@@ -382,7 +382,7 @@ export function buildMessagePrompt({
     const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
     if (reqMatch) {
       analysisSections.push(
-        `# 補足: 相手が自由記述した求める条件\n以下は相手が自ら書いた「求める条件」です。上の突き合わせと併せて参考にすること。\n\n${reqMatch[1].trim()}`
+        `# 補足: 相手が自由記述した求める条件\n以下は相手が自ら書いた「求める条件」です。需給マッチ分析と併せて参考にすること。\n\n${reqMatch[1].trim()}`
       )
     }
   }
@@ -653,12 +653,24 @@ export const DEFAULT_PROMPT = `あなたはマッチングサイト「Luna」で
 - 「プロフィール項目の突き合わせ」がある場合、会話の流れに合わせて噛み合う点を自然に織り込む
 ```
 
-- [ ] **Step 4: 分析セクション見出しを変更する**
+- [ ] **Step 4: 分析セクション見出しと補足文を変更する**
 
-`utils/message-prompt.ts`:
+`utils/message-prompt.ts` の見出し定数を変更する。
 
 ```ts
 export const ANALYSIS_SECTION_HEADING = "# プロフィール項目の突き合わせ"
+```
+
+同じファイルの「補足: 相手が自由記述した求める条件」の本文にある `需給マッチ分析` の参照も
+新見出しに追随させる（`buildMessagePrompt` 内の1箇所）。
+
+変更前:
+```
+以下は相手が自ら書いた「求める条件」です。需給マッチ分析と併せて参考にすること。
+```
+変更後:
+```
+以下は相手が自ら書いた「求める条件」です。上の突き合わせと併せて参考にすること。
 ```
 
 - [ ] **Step 5: テストを実行して通ることを確認する**
