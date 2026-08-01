@@ -33,18 +33,25 @@ export type PartnerTones = Record<string, PartnerToneEntry>
 /**
  * 相手ごとの記憶に使うキーを決める。
  *
- * URL のユーザーID > キャッシュのユーザーID > スレッドID の順。
+ * URL から決まるものを優先する（URL のユーザーID > URL のスレッドID）。
+ * どちらも取れないときだけキャッシュのユーザーIDを見る。
  * どれも取れなければ null（＝保存しない）。
+ *
+ * キャッシュより URL のスレッドIDを先に見るのは、キーをタイミングに依存させないため。
+ * メッセージページでは `resolveCachedPartner` がページ読み込み直後は必ず null を返し
+ * （スレッドIDの照合が通らない）、API キャッシュが届いた後は userId を返す。
+ * キャッシュを先に見ると同じ相手が `t:` と `u:` の2つのキーに割れ、
+ * 「さっき選んだ口調が忘れられている」ように見える（2026-08-02 のレビューで判明）。
  */
 export function resolvePartnerToneKey(url: string, cachedPartnerJson: string | null): string | null {
     const urlUserId = getUserIdFromUrl(url)
     if (urlUserId) return `u:${urlUserId}`
 
-    const cached = resolveCachedPartner(cachedPartnerJson, url)
-    if (cached?.userId) return `u:${cached.userId}`
-
     const threadId = getThreadIdFromUrl(url)
     if (threadId) return `t:${threadId}`
+
+    const cached = resolveCachedPartner(cachedPartnerJson, url)
+    if (cached?.userId) return `u:${cached.userId}`
 
     return null
 }

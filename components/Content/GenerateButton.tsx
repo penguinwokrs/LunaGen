@@ -8,7 +8,7 @@ import { formatChatHistory, resolveCachedHistory, resolveCachedPartner } from ".
 import { getThreadIdFromUrl, getUserIdFromUrl } from "../../utils/url"
 import { isPremiumInput } from "../../utils/premium"
 import { ToneSelector } from "./ToneSelector"
-import { NO_TONE } from "../../utils/tone"
+import { readActiveToneId } from "./tone-storage"
 
 const storage = new Storage({ area: "local" })
 
@@ -22,7 +22,6 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
     // エラーは「有無」ではなく実際のメッセージを保持する。
     // 固定文言だと安全フィルタのブロックなのかキー不備なのか切り分けられない。
     const [error, setError] = useState<string | null>(null)
-    const [toneId, setToneId] = useState<string>(NO_TONE)
 
     useEffect(() => {
         let timer: NodeJS.Timeout
@@ -149,7 +148,9 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 isPremium: isPremium,
                 demandSupplyHint: demandSupplyHint,
                 focusTopic: focusTopic,
-                toneId: toneId
+                // 口調は「押した時点」で読み直す。state に持つと SPA 遷移で
+                // 同じ textarea が使い回されたときに前の相手の口調で生成してしまう。
+                toneId: await readActiveToneId()
             })
 
             if (response && response.error) {
@@ -207,7 +208,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 >
                     {loading ? (slow ? "⌛ お待ち下さい..." : "🪄 生成中...") : (error ? "⚠️ 再試行" : "AI")}
                 </button>
-                <ToneSelector disabled={loading} onChange={setToneId} />
+                <ToneSelector disabled={loading} />
                 <button
                     onClick={handleClear}
                     disabled={loading}

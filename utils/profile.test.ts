@@ -102,8 +102,15 @@ describe("extractProfileFromJSON: 職業", () => {
         expect(text).not.toContain("999")
     })
 
-    it("work_text があればそちらを優先する", () => {
+    // work / work_text は実APIに存在しないフィールド。occupation を先に解決するのは、
+    // 将来 work に数値コードが生えたときに「職業: 20」がそのまま出るのを防ぐため。
+    it("occupation が解決できればそちらを使う", () => {
         const text = extractProfileFromJSON({ name: "テスト", occupation: 20, work_text: "自営業", profile: "よろしく" })
+        expect(text).toContain("職業: IT関連")
+    })
+
+    it("occupation が無ければ work_text にフォールバックする", () => {
+        const text = extractProfileFromJSON({ name: "テスト", work_text: "自営業", profile: "よろしく" })
         expect(text).toContain("職業: 自営業")
     })
 })

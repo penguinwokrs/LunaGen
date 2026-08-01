@@ -17,7 +17,6 @@ export const TonePresetSection = ({
     setDefaultToneId,
     onReset
 }: TonePresetSectionProps) => {
-    const [resetKey, setResetKey] = React.useState(0)
 
     const update = (id: string, patch: Partial<TonePreset>) => {
         setPresets(presets.map((p) => (p.id === id ? { ...p, ...patch } : p)))
@@ -28,10 +27,7 @@ export const TonePresetSection = ({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h2 style={{ fontSize: "1.2rem" }}>3. 口調プリセット</h2>
                 <button
-                    onClick={() => {
-                        onReset()
-                        setResetKey((prev) => prev + 1)
-                    }}
+                    onClick={onReset}
                     style={{
                         padding: "4px 8px", backgroundColor: "#f8f9fa", border: "1px solid #ddd",
                         borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem", color: "#666"
@@ -51,15 +47,13 @@ export const TonePresetSection = ({
             {presets.map((preset, i) => (
                 <div key={preset.id} style={{ marginBottom: "12px", padding: "10px", border: "1px solid #eee", borderRadius: "4px" }}>
                     <input
-                        key={`label-${preset.id}-${resetKey}`}
-                        defaultValue={preset.label}
+                        value={preset.label}
                         onChange={(e) => update(preset.id, { label: e.target.value })}
                         placeholder={`口調${i + 1}の名前`}
                         style={{ width: "200px", padding: "6px", marginBottom: "6px", boxSizing: "border-box" }}
                     />
                     <textarea
-                        key={`inst-${preset.id}-${resetKey}`}
-                        defaultValue={preset.instruction}
+                        value={preset.instruction}
                         onChange={(e) => update(preset.id, { instruction: e.target.value })}
                         placeholder="口調の指示文（空にするとこの枠はメニューに出ません）"
                         rows={3}

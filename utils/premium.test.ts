@@ -92,3 +92,20 @@ describe("applyPremiumPrompt", () => {
         })
     })
 })
+
+describe("applyPremiumPrompt: 素材が乏しい相手の指示", () => {
+    it("実際の DEFAULT_PROMPT で「100文字程度で短く書く」が残らない", () => {
+        const out = applyPremiumPrompt(DEFAULT_PROMPT)
+        expect(out).not.toContain("100文字程度で短く書く")
+    })
+
+    it("差し替え後も「無理に文字数を稼がない」趣旨は残る", () => {
+        const out = applyPremiumPrompt(DEFAULT_PROMPT)
+        expect(out).toContain("無理に文字数を稼がない")
+    })
+
+    it("文字数制約より素材の範囲を優先する旨が入る", () => {
+        const out = applyPremiumPrompt(DEFAULT_PROMPT)
+        expect(out).toContain("文字数制約より素材の範囲を優先")
+    })
+})

@@ -25,13 +25,20 @@ describe("resolvePartnerToneKey", () => {
     expect(resolvePartnerToneKey("https://luna-matching.com/user/show/123", null)).toBe("u:123")
   })
 
-  it("URLで取れなければキャッシュのユーザーIDを使う", () => {
-    const cached = JSON.stringify({ user: { id: 456 }, threadId: "789" })
-    expect(resolvePartnerToneKey("https://luna-matching.com/user/message/789", cached)).toBe("u:456")
+  it("メッセージページはスレッドIDを使う", () => {
+    expect(resolvePartnerToneKey("https://luna-matching.com/user/message/789", null)).toBe("t:789")
   })
 
-  it("ユーザーIDが取れなければスレッドIDを使う", () => {
-    expect(resolvePartnerToneKey("https://luna-matching.com/user/message/789", null)).toBe("t:789")
+  // キャッシュはページ読み込み直後には無く、後から届く。キャッシュを先に見ると
+  // 同じ相手が t: と u: に割れるため、URLから決まるものを常に優先する。
+  it("メッセージページではキャッシュがあってもスレッドIDを使う（キーをタイミングに依存させない）", () => {
+    const cached = JSON.stringify({ user: { id: 456 }, threadId: "789" })
+    expect(resolvePartnerToneKey("https://luna-matching.com/user/message/789", cached)).toBe("t:789")
+  })
+
+  it("URLから何も取れないときだけキャッシュのユーザーIDを使う", () => {
+    const cached = JSON.stringify({ user: { id: 456 } })
+    expect(resolvePartnerToneKey("https://luna-matching.com/user/show/456", cached)).toBe("u:456")
   })
 
   it("どれも取れなければ null", () => {

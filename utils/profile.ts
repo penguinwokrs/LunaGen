@@ -58,7 +58,7 @@ export function extractProfileFromJSON(u: any, rawResponse?: any): string {
     // 従来この行は常に出力されず、職業がプロンプトに一度も入っていなかった。
     // occupation_list は API から返らないので utils/occupation.ts の対応表で解決する。
     const occupation =
-        data.work_text || data.work || resolveOccupation(data.occupation, rawResponse?.occupation_list)
+        resolveOccupation(data.occupation, rawResponse?.occupation_list) || data.work_text || data.work
     if (occupation) text += `職業: ${occupation}\n`
 
     // 自己紹介 (複数のプロパティ名をサポート)

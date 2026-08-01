@@ -34,6 +34,14 @@ describe("resolveOccupation", () => {
         expect(resolveOccupation("   ")).toBeNull()
     })
 
+    it("中間のコードもずれていない（両端だけではオフバイワンを検出できない）", () => {
+        expect(OCCUPATION_LABELS["10"]).toBe("医師")
+        expect(OCCUPATION_LABELS["19"]).toBe("教育関連")
+        expect(OCCUPATION_LABELS["30"]).toBe("ブライダル")
+        expect(OCCUPATION_LABELS["49"]).toBe("会社員")
+        expect(OCCUPATION_LABELS["53"]).toBe("エンジニア")
+    })
+
     it("対応表は58件で、1と58が端", () => {
         expect(Object.keys(OCCUPATION_LABELS)).toHaveLength(58)
         expect(OCCUPATION_LABELS["1"]).toBe("上場企業")

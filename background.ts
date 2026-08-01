@@ -448,6 +448,9 @@ chrome.runtime.onInstalled.addListener(async () => {
       if (migrated !== null) {
         await storage.set(key, migrated)
         await logBG("info", `Prompt migrated to new default: ${key}`)
+      } else if (stored === undefined || stored === null || stored === "") {
+        // 未設定は生成時にデフォルトへフォールバックするので何もしない（常に最新が使われる）
+        await logBG("info", `Prompt unset, always uses latest default: ${key}`)
       } else if (stored === next) {
         await logBG("info", `Prompt already up to date: ${key}`)
       } else {

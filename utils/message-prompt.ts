@@ -43,18 +43,20 @@ export function buildMessagePrompt({
 
   if (isPremium) prompt = applyPremiumPrompt(prompt)
 
-  prompt = prompt.replace("{my_info_clean}", myProfile).replace("{target_info_clean}", targetProfile)
+  // split/join を使う。replace は置換文字列の $& や $' を特殊解釈するため、
+  // プロフィール本文や入力欄のテキストに含まれるとプロンプトが壊れる。
+  prompt = prompt.split("{my_info_clean}").join(myProfile).split("{target_info_clean}").join(targetProfile)
 
   const nameToUse = targetName && targetName.trim() ? targetName.trim() : "ゲスト"
   prompt = prompt.split("[相手の名前]").join(nameToUse)
 
-  if (chatHistory) prompt = prompt.replace("{chat_history}", chatHistory)
+  if (chatHistory) prompt = prompt.split("{chat_history}").join(chatHistory)
 
   const analysisSections: string[] = []
 
   // 0. ユーザーがメッセージ入力欄に書いた優先話題（最優先で先頭に置く）
   if (focusTopic && focusTopic.trim()) {
-    analysisSections.push(FOCUS_TOPIC_INSTRUCTION.replace("{focus_topic}", focusTopic.trim()))
+    analysisSections.push(FOCUS_TOPIC_INSTRUCTION.split("{focus_topic}").join(focusTopic.trim()))
   }
 
   // 1. プロフィール項目の突き合わせ
@@ -75,7 +77,7 @@ export function buildMessagePrompt({
   if (analysisSections.length > 0) {
     const analysisBlock = analysisSections.join("\n\n")
     prompt = prompt.includes(TARGET_PROFILE_MARKER)
-      ? prompt.replace(TARGET_PROFILE_MARKER, `${analysisBlock}\n\n${TARGET_PROFILE_MARKER}`)
+      ? prompt.split(TARGET_PROFILE_MARKER).join(`${analysisBlock}\n\n${TARGET_PROFILE_MARKER}`)
       : `${prompt}\n\n${analysisBlock}`
   }
 

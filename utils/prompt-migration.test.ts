@@ -6,16 +6,19 @@ const LEGACY = "旧プロンプト本文"
 const NEXT = "新プロンプト本文"
 
 describe("migratePrompt", () => {
-  it("未保存（undefined）なら新プロンプトを返す", () => {
-    expect(migratePrompt(undefined, LEGACY, NEXT)).toBe(NEXT)
+  // 未設定のユーザーは生成時の `storage.get() || DEFAULT_PROMPT` で常に最新を使う。
+  // ここで書き込むと「常に最新」から「その時点で固定」に変わり、次回のデフォルト更新で
+  // 取り残される。書き込まないのが正しい。
+  it("未保存（undefined）なら書き込まない", () => {
+    expect(migratePrompt(undefined, LEGACY, NEXT)).toBeNull()
   })
 
-  it("null なら新プロンプトを返す", () => {
-    expect(migratePrompt(null, LEGACY, NEXT)).toBe(NEXT)
+  it("null なら書き込まない", () => {
+    expect(migratePrompt(null, LEGACY, NEXT)).toBeNull()
   })
 
-  it("空文字なら新プロンプトを返す", () => {
-    expect(migratePrompt("", LEGACY, NEXT)).toBe(NEXT)
+  it("空文字なら書き込まない", () => {
+    expect(migratePrompt("", LEGACY, NEXT)).toBeNull()
   })
 
   it("旧プロンプトと完全一致なら新プロンプトを返す", () => {

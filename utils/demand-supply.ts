@@ -304,7 +304,11 @@ export function formatDemandSupplyHint(result: DemandSupplyResult): string {
   const blocks: string[] = []
 
   if (topics.length > 0) {
-    const lines = ["話題になりうる噛み合い（相手の自由記述に手がかりが無いときだけ使う）:"]
+    // 「自由記述に手がかりが無いときだけ使う」という但し書きはここに書かない。
+    // このヒントは初回・会話継続の両方に注入されるが、継続用テンプレートは
+    // 「噛み合う点を自然に織り込む」と指示しており正面から矛盾する。
+    // 初回限定の制約は DEFAULT_PROMPT のステップ1側に既に書いてある。
+    const lines = ["話題になりうる噛み合い:"]
     for (const m of topics) lines.push(`- [${m.axis}/${m.direction}] ${m.label} — ${m.talkingPoint}`)
     blocks.push(lines.join("\n"))
   }
