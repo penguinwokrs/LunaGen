@@ -127,7 +127,7 @@ describe("computeDemandSupply: 堅牢性", () => {
 })
 
 describe("formatDemandSupplyHint", () => {
-  it("strength降順で上位4件までに制限", () => {
+  it("strength降順で話題は上位3件・前提条件は上位3件までに制限", () => {
     const me = {
       age: 33, conditions_age_from: 25, conditions_age_to: 40, area: "13",
       conditions_area: ["13"], body_type: "3", conditions_body: ["3"],
@@ -141,10 +141,15 @@ describe("formatDemandSupplyHint", () => {
       my_type: "J", q_sex: 4, q_pleasure: 4, q_dom: 4
     }
     const result = computeDemandSupply(me, target)
-    expect(result.matches.length).toBeGreaterThan(4)
+    // 話題候補（役割1件 + 嗜好3件 = 4件）・前提条件候補（生活条件4件）ともに
+    // 各ブロックの上限（3件）を超える
+    expect(result.matches.filter((m) => m.axis === "生活条件").length).toBeGreaterThan(3)
     const text = formatDemandSupplyHint(result)
-    const bulletLines = text.split("\n").filter((l) => l.startsWith("- ["))
-    expect(bulletLines.length).toBe(4)
+    // 話題ブロックの箇条書きは [軸/方向] 形式、前提条件ブロックは [方向] 形式
+    const topicLines = text.split("\n").filter((l) => /^- \[[^/]+\/.+\]/.test(l))
+    const premiseLines = text.split("\n").filter((l) => /^- \[[^/]+\]/.test(l) && !/\//.test(l))
+    expect(topicLines.length).toBe(3)
+    expect(premiseLines.length).toBe(3)
   })
 
   it("ロマンチックな決め台詞を含まない", () => {
@@ -177,5 +182,63 @@ describe("lookups", () => {
     const without = generateDemandSupplyHint(me, target)
     expect(typeof withLk).toBe("string")
     expect(typeof without).toBe("string")
+  })
+})
+
+describe("formatDemandSupplyHint: 3ブロック分割", () => {
+  const topicMatch = {
+    axis: "嗜好" as const,
+    direction: "相互" as const,
+    strength: 3,
+    label: "「拘束」への関心が共通（自分4/相手5）",
+    talkingPoint: "拘束の指向が共通。相手の表現に合わせる。"
+  }
+  const premiseMatch = {
+    axis: "生活条件" as const,
+    direction: "相互" as const,
+    strength: 2.5,
+    label: "年齢がお互いの希望条件に合致",
+    talkingPoint: "年齢条件が噛み合っている。前提として扱う。"
+  }
+
+  it("生活条件だけなら前提条件ブロックのみ出力し、話題ブロックを出さない", () => {
+    const out = formatDemandSupplyHint({ matches: [premiseMatch], avoid: [] })
+    expect(out).toContain("前提条件")
+    expect(out).not.toContain("話題になりうる噛み合い")
+  })
+
+  it("前提条件ブロックには talkingPoint を出力しない", () => {
+    const out = formatDemandSupplyHint({ matches: [premiseMatch], avoid: [] })
+    expect(out).toContain("年齢がお互いの希望条件に合致")
+    expect(out).not.toContain("前提として扱う")
+  })
+
+  it("嗜好軸は話題になりうる噛み合いブロックに入る", () => {
+    const out = formatDemandSupplyHint({ matches: [topicMatch, premiseMatch], avoid: [] })
+    expect(out).toContain("話題になりうる噛み合い")
+    const topicIdx = out.indexOf("「拘束」への関心が共通")
+    const premiseIdx = out.indexOf("年齢がお互いの希望条件に合致")
+    expect(topicIdx).toBeGreaterThanOrEqual(0)
+    expect(premiseIdx).toBeGreaterThan(topicIdx)
+  })
+
+  it("話題ブロックには talkingPoint を出力する", () => {
+    const out = formatDemandSupplyHint({ matches: [topicMatch], avoid: [] })
+    expect(out).toContain("拘束の指向が共通")
+  })
+
+  it("避ける点は独立したブロックとして維持される", () => {
+    const out = formatDemandSupplyHint({ matches: [topicMatch], avoid: ["相手はNGを明記している。"] })
+    expect(out).toContain("避ける点:")
+    expect(out).toContain("相手はNGを明記している。")
+  })
+
+  it("マッチも避ける点も無ければ空文字", () => {
+    expect(formatDemandSupplyHint({ matches: [], avoid: [] })).toBe("")
+  })
+
+  it("旧見出し『最も噛み合う1〜2点を主役にする』は出力しない", () => {
+    const out = formatDemandSupplyHint({ matches: [topicMatch, premiseMatch], avoid: [] })
+    expect(out).not.toContain("主役にする")
   })
 })

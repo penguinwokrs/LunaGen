@@ -288,25 +288,42 @@ export function computeDemandSupply(
 
 // ===== 整形 =====
 
-const MAX_MATCHES = 4
+const MAX_TOPIC_MATCHES = 3
+const MAX_PREMISE_MATCHES = 3
+
+/** 話題の主役になりうる軸。生活条件は会話の土台であって話題ではない。 */
+const TOPIC_AXES: Axis[] = ["嗜好", "目的", "役割"]
 
 export function formatDemandSupplyHint(result: DemandSupplyResult): string {
-  const top = [...result.matches].sort((a, b) => b.strength - a.strength).slice(0, MAX_MATCHES)
-  if (top.length === 0 && result.avoid.length === 0) return ""
+  const sorted = [...result.matches].sort((a, b) => b.strength - a.strength)
+  const topics = sorted.filter((m) => TOPIC_AXES.includes(m.axis)).slice(0, MAX_TOPIC_MATCHES)
+  const premises = sorted.filter((m) => m.axis === "生活条件").slice(0, MAX_PREMISE_MATCHES)
 
-  const lines: string[] = []
-  if (top.length > 0) {
-    lines.push("噛み合う点（強い順。最も噛み合う1〜2点を主役にする）:")
-    for (const m of top) {
-      lines.push(`- [${m.axis}/${m.direction}] ${m.label} — ${m.talkingPoint}`)
-    }
+  if (topics.length === 0 && premises.length === 0 && result.avoid.length === 0) return ""
+
+  const blocks: string[] = []
+
+  if (topics.length > 0) {
+    const lines = ["話題になりうる噛み合い（相手の自由記述に手がかりが無いときだけ使う）:"]
+    for (const m of topics) lines.push(`- [${m.axis}/${m.direction}] ${m.label} — ${m.talkingPoint}`)
+    blocks.push(lines.join("\n"))
   }
+
+  if (premises.length > 0) {
+    // 前提条件は talkingPoint を出さない。出すと「エリアが噛み合う。会いやすさに
+    // 触れられる」等の文面が話題化を誘い、生活条件が主役に据えられてしまう。
+    const lines = ["前提条件（会話の土台。話題の主役にはしない）:"]
+    for (const m of premises) lines.push(`- [${m.direction}] ${m.label}`)
+    blocks.push(lines.join("\n"))
+  }
+
   if (result.avoid.length > 0) {
-    lines.push("")
-    lines.push("避ける点:")
+    const lines = ["避ける点:"]
     for (const a of result.avoid) lines.push(`- ${a}`)
+    blocks.push(lines.join("\n"))
   }
-  return lines.join("\n")
+
+  return blocks.join("\n\n")
 }
 
 /**
