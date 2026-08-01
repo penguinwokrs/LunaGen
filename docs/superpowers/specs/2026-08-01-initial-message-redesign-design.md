@@ -68,7 +68,8 @@ LLM は200字を埋めようとして捏造か無難話題に走る。
 - **避ける点**: 既存の `avoid` 配列。現行の文面・挙動のまま維持する
 
 生活条件軸の `talkingPoint` は現状「エリアが噛み合う。会いやすさ・距離感に軽く触れられる」のように
-話題化を誘う文面になっているため、前提として扱う文面に書き換える。
+話題化を誘う文面になっている。**前提条件ブロックでは `talkingPoint` を出力しない**ことで対処する
+（データ側の文言を書き換えるより単純で、話題化を確実に防げる）。ラベルのみを出力する。
 
 両ブロックとも該当が無ければそのブロックごと出力しない（現行の空文字返却の挙動は維持）。
 
@@ -251,14 +252,16 @@ LLM は200字を埋めようとして捏造か無難話題に走る。
 - 生活条件軸のみのとき「前提条件」ブロックだけが出力され、「話題になりうる噛み合い」ブロックが出ない
 - 嗜好軸があるとき両ブロックが出力され、嗜好が「話題になりうる噛み合い」側に入る
 - どちらも無ければ空文字を返す（既存の挙動を維持）
-- 生活条件軸の `talkingPoint` に話題化を誘う文言が含まれない
+- 前提条件ブロックには `talkingPoint` が出力されない（ラベルのみ）
 
 ## 変更ファイル
 
 | ファイル | 変更 |
 |---|---|
 | `constants.ts` | `DEFAULT_PROMPT` を差し替え。`CONTINUOUS_CONVERSATION_PROMPT` の参照1箇所を追随 |
-| `utils/demand-supply.ts` | `formatDemandSupplyHint` を2ブロック分割。生活条件軸の `talkingPoint` を前提向けに書き換え |
+| `utils/demand-supply.ts` | `formatDemandSupplyHint` を3ブロック分割。前提条件ブロックは `talkingPoint` を出力しない |
+| `utils/message-prompt.ts` | 新規。プロンプト組み立てを `background.ts` から純粋関数として抽出（評価ハーネスが本番と同一の組み立てを通すために必要） |
+| `utils/message-prompt.test.ts` | 新規 |
 | `utils/demand-supply.test.ts` | 上記のテストを追加 |
 | `background.ts` | 注入セクション見出しを `# プロフィール項目の突き合わせ` に変更。`onInstalled` にプロンプト移行を追加 |
 | `utils/prompt-migration.ts` | 新規。未編集判定と移行の純粋関数 |
