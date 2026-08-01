@@ -7,6 +7,8 @@ import { extractLookups, generateDemandSupplyHint } from "../../utils/demand-sup
 import { formatChatHistory, resolveCachedHistory, resolveCachedPartner } from "../../utils/partner"
 import { getThreadIdFromUrl, getUserIdFromUrl } from "../../utils/url"
 import { isPremiumInput } from "../../utils/premium"
+import { ToneSelector } from "./ToneSelector"
+import { NO_TONE } from "../../utils/tone"
 
 const storage = new Storage({ area: "local" })
 
@@ -20,6 +22,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
     // エラーは「有無」ではなく実際のメッセージを保持する。
     // 固定文言だと安全フィルタのブロックなのかキー不備なのか切り分けられない。
     const [error, setError] = useState<string | null>(null)
+    const [toneId, setToneId] = useState<string>(NO_TONE)
 
     useEffect(() => {
         let timer: NodeJS.Timeout
@@ -145,7 +148,8 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 chatHistory: chatHistory,
                 isPremium: isPremium,
                 demandSupplyHint: demandSupplyHint,
-                focusTopic: focusTopic
+                focusTopic: focusTopic,
+                toneId: toneId
             })
 
             if (response && response.error) {
@@ -203,6 +207,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 >
                     {loading ? (slow ? "⌛ お待ち下さい..." : "🪄 生成中...") : (error ? "⚠️ 再試行" : "AI")}
                 </button>
+                <ToneSelector disabled={loading} onChange={setToneId} />
                 <button
                     onClick={handleClear}
                     disabled={loading}
