@@ -107,6 +107,11 @@ function anonymize(u) {
   const out = {}
   for (const [k, v] of Object.entries(u)) {
     const lower = k.toLowerCase()
+    // allowlist を通ったあとの最終ガード。前方一致の許可（conditions_ 等）は想定外の
+    // フィールドを通しうる。2026-08-02 の実収集で conditions_type_img_url が実際にすり抜け、
+    // ファイル名に個体別ID（.../conditions_type_img_url_149587.png）を含んでいた。
+    // これはIDをHMACで潰した意味を無効化する再識別の穴なので、URL・画像系は常に落とす。
+    if (/url|image|img|icon|photo|thumb/.test(lower)) continue
     const allowed = ALLOW_EXACT.has(lower) || ALLOW_PREFIXES.some((p) => lower.startsWith(p))
     if (!allowed) continue
     // allowlist を通過したキーでも、値がオブジェクト（配列含む）のネストなら中身は
@@ -238,7 +243,8 @@ const autosaveTimer = setInterval(() => {
 
 const context = await chromium.launchPersistentContext(PROFILE_DIR, {
   channel: "chromium",
-  headless: false,
+  // 手動モードでは人がスクロールするので表示が要る。自動巡回モードは表示不要。
+  headless: process.env.AUTO_SCROLL === "1",
   viewport: { width: 1280, height: 900 }
 })
 
@@ -248,7 +254,11 @@ context.on("response", async (res) => {
   // プロセスが落ち、保存はSIGINT時のみなのでそれまでの収集が全部消えてしまう。
   try {
     const url = res.url()
-    if (!url.includes("/api/user/")) return
+    // 2026-08-02 実測: ユーザー一覧は /api/user/ ではなく /api/v1/search から返る
+    // （1リクエスト20件、自己紹介・text_my_*・q_*・conditions_* を含む完全な形）。
+    // 一覧APIのパスを決め打ちできないので、Lunaのホスト配下の /api/ を広く拾う。
+    // ホストで絞るのは、Sentry や Datadog RUM など第三者の /api/ を拾わないため。
+    if (!url.includes("luna-matching.com/api/")) return
     let json
     try {
       json = await res.json()
@@ -310,6 +320,55 @@ process.on("SIGINT", async () => {
 })
 
 const page = await context.newPage()
-await page.goto("https://luna-matching.com/")
-console.log("[corpus] ブラウザで検索一覧・いいね一覧などをスクロールしてください。")
-console.log("[corpus] 目標に達したら Ctrl+C で保存します。")
+
+/** 目標到達判定 */
+function reachedTarget() {
+  const c = counts()
+  return c.rich >= TARGET_PER_STRATUM && c.thin >= TARGET_PER_STRATUM &&
+    c.empty >= TARGET_PER_STRATUM && users.size >= TARGET_TOTAL
+}
+
+if (process.env.AUTO_SCROLL === "1") {
+  // 自動巡回モード。/search を開いて最下部までスクロールし続け、
+  // 目標に達するか上限回数に届いたら保存して終了する。
+  // 2026-08-02 実測: /api/v{n}/search が1リクエストあたり20件返し、
+  // 自己紹介・text_my_like・text_my_ng・q_*・conditions_* を含む完全な形で来る。
+  const MAX_SCROLLS = Number(process.env.AUTO_SCROLL_MAX || 60)
+  console.log("[corpus] 自動巡回モードで開始します（AUTO_SCROLL=1）")
+  await page.goto("https://luna-matching.com/search", { waitUntil: "networkidle", timeout: 60_000 })
+
+  let idle = 0
+  let prevSize = 0
+  for (let i = 0; i < MAX_SCROLLS && !reachedTarget(); i++) {
+    await page.mouse.wheel(0, 5000)
+    await page.waitForTimeout(2000)
+    if (users.size === prevSize) {
+      idle++
+      // 新規が増えなくなったら一度ページ末尾へ飛ばして追加読み込みを促す
+      if (idle >= 3) {
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+        await page.waitForTimeout(2500)
+      }
+      if (idle >= 8) {
+        console.log("[corpus] 新規が増えなくなったため打ち切ります")
+        break
+      }
+    } else {
+      idle = 0
+      prevSize = users.size
+    }
+  }
+
+  clearInterval(autosaveTimer)
+  try {
+    save()
+  } catch (err) {
+    console.error("[corpus] 保存に失敗しました:", err)
+  }
+  await context.close()
+  process.exit(0)
+} else {
+  await page.goto("https://luna-matching.com/")
+  console.log("[corpus] ブラウザで検索一覧・いいね一覧などをスクロールしてください。")
+  console.log("[corpus] 目標に達したら Ctrl+C で保存します。")
+}
