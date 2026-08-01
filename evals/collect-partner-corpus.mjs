@@ -76,6 +76,8 @@ const INTRO_FIELDS = ["profile", "introduction", "intro", "body"]
 
 const users = new Map() // hashedId -> anonymized user
 let lastSavedSize = 0
+/** id相当の値がプリミティブでなかったためスキップしたレコード数（ハッシュ衝突回避） */
+let skippedNonPrimitiveId = 0
 
 // 実行ごとにランダムな salt を生成し、HMAC でハッシュ化する。
 // 単純な sha256(id).slice(0,12) は、Luna のユーザーIDが小さい連番整数である以上
@@ -88,6 +90,17 @@ const hash = (v) => createHmac("sha256", SALT).update(String(v)).digest("hex").s
 /** 文字列・数値・真偽値だけの配列かどうか（conditions_area: ["13","14"] 等） */
 function isPrimitiveArray(v) {
   return Array.isArray(v) && v.every((x) => x === null || ["string", "number", "boolean"].includes(typeof x))
+}
+
+/**
+ * id相当の値が安定した一意性を持つプリミティブ（文字列・数値）かどうか。
+ * `hash()` は `String(v)` を経由するため、id がオブジェクトだと `"[object Object]"` という
+ * 定数文字列がハッシュされ、異なる実ユーザーが同一ハッシュIDに衝突しうる（衝突すると
+ * users.set の後勝ちで前のレコードが静かに消える）。安定した一意性が得られない場合は
+ * そのレコードを収集対象から外す。
+ */
+function isPrimitiveId(v) {
+  return typeof v === "string" || typeof v === "number"
 }
 
 function anonymize(u) {
@@ -128,6 +141,34 @@ function looksLikeUser(o) {
   return hasId && hasProfileish
 }
 
+/**
+ * `utils/profile.ts` の `extractProfileFromJSON` は
+ * `asObject(u.user) || asObject(u.profile) || asObject(u.member) || u` という形で、
+ * 実データが `user`/`profile`/`member` キーの下にネストしている形状を明示的に想定している
+ * （`profile` はネスト用ラッパーのキー名でもあり、自己紹介文そのもののフィールド名でもあるため、
+ * オブジェクトの場合のみラッパーとして扱う、という判定も含めて同一の優先順位で揃えている）。
+ *
+ * ここではその形状を harvest 側でも認識できるよう、外側と内側を1件のユーザーとして統合する。
+ * 「外側に id、内側に自己紹介本文や q_* がある」ケースが実際にあり得るため、id はできれば
+ * 外側にも残しつつ、実データ（内側）を優先してマージする。ラッパーキー自体は展開後の混乱を
+ * 避けるため出力に含めない。統合後のオブジェクトは harvest の中でしか使わず、最終的な出力は
+ * 必ず anonymize() の allowlist を通す（ここでは allowlist を迂回しない）。
+ */
+function unwrapNested(u) {
+  if (!u || typeof u !== "object" || Array.isArray(u)) return { value: u, wrapperKey: null }
+  const asObject = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : null)
+  let wrapperKey = null
+  let inner = null
+  if ((inner = asObject(u.user))) wrapperKey = "user"
+  else if ((inner = asObject(u.profile))) wrapperKey = "profile"
+  else if ((inner = asObject(u.member))) wrapperKey = "member"
+  if (!inner) return { value: u, wrapperKey: null }
+  const outerRest = { ...u }
+  delete outerRest[wrapperKey]
+  // 内側（実データ）を優先してマージ。外側にしか無いキー（例: 外側だけのid）は残る。
+  return { value: { ...outerRest, ...inner }, wrapperKey }
+}
+
 /** レスポンスJSONを再帰的に走査してユーザーオブジェクトを集める。
  *  JSONにサイクルは無いため深さを広げるコストはほぼ無い。暴走防止のためだけに
  *  上限を高く残す（実データがここまで深くネストすることは通常ない）。 */
@@ -137,8 +178,17 @@ function harvest(node, found, depth = 0) {
     for (const item of node) harvest(item, found, depth + 1)
     return
   }
-  if (looksLikeUser(node)) found.push(node)
-  for (const v of Object.values(node)) harvest(v, found, depth + 1)
+  const { value: merged, wrapperKey } = unwrapNested(node)
+  const captured = looksLikeUser(merged)
+  if (captured) found.push(merged)
+  for (const [k, v] of Object.entries(node)) {
+    // 統合済みのラッパーキー（user/profile/member）の中身は既に found に取り込んでいるので、
+    // 二重に走査して同じユーザーを found に重複投入しない（`user: {id, profile, ...}` のように
+    // 内側自身が id を持つ形状だと、統合前の生の内側オブジェクトも単独で looksLikeUser を満たし
+    // うるため）。統合できなかった場合（captured=false）は通常通り中身も探索する。
+    if (captured && k === wrapperKey) continue
+    harvest(v, found, depth + 1)
+  }
 }
 
 /** 自己紹介の長さで層を決める */
@@ -173,8 +223,17 @@ function autosaveIfNeeded() {
 
 // 長時間ブラウジングしていて新規追加が細かい場合でも、一定間隔で保存しておく
 // （unhandled rejection 等でプロセスが落ちても、それまでの収集が全損しないように）。
+// save() 内の mkdirSync/writeFileSync が例外（ディスク不足等）を投げると、setInterval の
+// コールバックは他のどこにも try/catch で保護されていないため未捕捉例外となりプロセス全体が
+// 落ちてしまう。「全損防止」という自動保存の目的そのものを裏切るため、ここで確実に保護する。
 const autosaveTimer = setInterval(() => {
-  if (users.size > lastSavedSize) save()
+  if (users.size > lastSavedSize) {
+    try {
+      save()
+    } catch (err) {
+      console.error("[corpus] 自動保存に失敗しました（収集は継続します）:", err)
+    }
+  }
 }, AUTOSAVE_INTERVAL_MS)
 
 const context = await chromium.launchPersistentContext(PROFILE_DIR, {
@@ -200,6 +259,19 @@ context.on("response", async (res) => {
     harvest(json, found)
     let added = 0
     for (const u of found) {
+      // id相当の値が非プリミティブ（オブジェクト等）だと hash() が "[object Object]" という
+      // 定数文字列をハッシュしてしまい、異なる実ユーザーが同一ハッシュIDに衝突する
+      // （後勝ちで前のレコードが静かに消える）。安定した一意性が得られないので、
+      // anonymize() に渡す前にここで弾く。
+      const rawId = u.id ?? u.user_id
+      if (rawId !== undefined && rawId !== null && !isPrimitiveId(rawId)) {
+        skippedNonPrimitiveId++
+        console.warn(
+          `[corpus] idが非プリミティブのためスキップ（累計${skippedNonPrimitiveId}件）:`,
+          typeof rawId
+        )
+        continue
+      }
       const a = anonymize(u)
       if (!users.has(a.id)) {
         users.set(a.id, a)
@@ -226,7 +298,13 @@ process.on("SIGINT", async () => {
   if (shuttingDown) return
   shuttingDown = true
   clearInterval(autosaveTimer)
-  save()
+  // 終了時保存も自動保存タイマーと同様に保護する。ここで例外が飛ぶと、収集済みデータが
+  // 最後まで一切保存されないまま終了してしまう（そのために備えたSIGINTハンドラの意味が無い）。
+  try {
+    save()
+  } catch (err) {
+    console.error("[corpus] 終了時の保存に失敗しました:", err)
+  }
   await context.close()
   process.exit(0)
 })
