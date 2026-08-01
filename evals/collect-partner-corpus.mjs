@@ -49,6 +49,8 @@ const PROFILE_DIR = "e2e/.profile"
 const ALLOW_EXACT = new Set([
   "age", "sex", "area", "area_text",
   "work", "work_text",
+  "occupation", // 実APIの職業フィールド（数値コード）。utils/occupation.ts で表示名に解決される
+
   "profile", "introduction", "intro", "body", // 自己紹介（4通りのフィールド名に対応）
   "preference", "preferences", "style", "play_style", // 嗜好・プレイスタイル
   "requirement", "requirements", "condition", "target_condition", // 求める条件

@@ -76,3 +76,34 @@ describe("extractProfileFromJSON", () => {
         expect(extractProfileFromJSON(undefined)).toBe("")
     })
 })
+
+describe("extractProfileFromJSON: 職業", () => {
+    it("occupation の数値コードを表示名に解決して出力する", () => {
+        const text = extractProfileFromJSON({ name: "テスト", occupation: 20, profile: "よろしく" })
+        expect(text).toContain("職業: IT関連")
+    })
+
+    it("APIが occupation_list を返した場合はそちらを優先する", () => {
+        const text = extractProfileFromJSON(
+            { name: "テスト", occupation: 20, profile: "よろしく" },
+            { occupation_list: { "20": "情報通信" } }
+        )
+        expect(text).toContain("職業: 情報通信")
+    })
+
+    it("occupation が未設定なら職業行を出さない", () => {
+        const text = extractProfileFromJSON({ name: "テスト", occupation: null, profile: "よろしく" })
+        expect(text).not.toContain("職業:")
+    })
+
+    it("対応表に無いコードは職業行を出さない（番号をそのまま出さない）", () => {
+        const text = extractProfileFromJSON({ name: "テスト", occupation: 999, profile: "よろしく" })
+        expect(text).not.toContain("職業:")
+        expect(text).not.toContain("999")
+    })
+
+    it("work_text があればそちらを優先する", () => {
+        const text = extractProfileFromJSON({ name: "テスト", occupation: 20, work_text: "自営業", profile: "よろしく" })
+        expect(text).toContain("職業: 自営業")
+    })
+})

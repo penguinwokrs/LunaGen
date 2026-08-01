@@ -1,4 +1,5 @@
 import { formatKinkSection } from "./kink-analysis"
+import { resolveOccupation } from "./occupation"
 
 /**
  * LunaのユーザーJSONからプロフィールテキストを抽出する
@@ -53,7 +54,12 @@ export function extractProfileFromJSON(u: any, rawResponse?: any): string {
         if (areaDisplay) text += `居住地: ${areaDisplay}\n`
     }
     if (data.relationship_text || data.relationship) text += `目的: ${data.relationship_text || data.relationship}\n`
-    if (data.work_text || data.work) text += `職業: ${data.work_text || data.work}\n`
+    // 実APIのフィールド名は `occupation`（数値コード）。work / work_text は実在しないため、
+    // 従来この行は常に出力されず、職業がプロンプトに一度も入っていなかった。
+    // occupation_list は API から返らないので utils/occupation.ts の対応表で解決する。
+    const occupation =
+        data.work_text || data.work || resolveOccupation(data.occupation, rawResponse?.occupation_list)
+    if (occupation) text += `職業: ${occupation}\n`
 
     // 自己紹介 (複数のプロパティ名をサポート)
     const intro = data.profile || data.introduction || data.intro || data.body
