@@ -46,6 +46,14 @@ describe("DEFAULT_PROMPT", () => {
     // utils/premium.ts の applyPremiumPrompt が置換対象にする文面
     expect(DEFAULT_PROMPT).toContain("200文字以内")
   })
+
+  it("名前からの連想を禁止する行を持つ", () => {
+    // 実害報告: 相手の名前に「ぴの」が入っていると「アイスが好きですね」
+    // （ピノ＝アイスクリームの商品名）という、プロフィールに無い話題を
+    // 名前から連想して作り出してしまう問題への対処
+    expect(DEFAULT_PROMPT).toContain("名前")
+    expect(DEFAULT_PROMPT).toContain("連想")
+  })
 })
 
 describe("FOCUS_TOPIC_INSTRUCTION", () => {
