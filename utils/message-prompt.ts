@@ -9,7 +9,7 @@ import { FOCUS_TOPIC_INSTRUCTION } from "../constants"
 import { applyPremiumPrompt } from "./premium"
 
 /** 分析セクションの見出し */
-export const ANALYSIS_SECTION_HEADING = "# 需給マッチ分析"
+export const ANALYSIS_SECTION_HEADING = "# プロフィール項目の突き合わせ"
 
 /** 分析セクションを差し込む位置のマーカー */
 export const TARGET_PROFILE_MARKER = "# 相手のプロフィール"
@@ -63,7 +63,7 @@ export function buildMessagePrompt({
     const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
     if (reqMatch) {
       analysisSections.push(
-        `# 補足: 相手が自由記述した求める条件\n以下は相手が自ら書いた「求める条件」です。需給マッチ分析と併せて参考にすること。\n\n${reqMatch[1].trim()}`
+        `# 補足: 相手が自由記述した求める条件\n以下は相手が自ら書いた「求める条件」です。上の突き合わせと併せて参考にすること。\n\n${reqMatch[1].trim()}`
       )
     }
   }

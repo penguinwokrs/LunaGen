@@ -45,8 +45,11 @@ describe("applyPremiumPrompt", () => {
         expect(out).not.toContain("合計200文字以内")
     })
 
-    it("「最も噛み合う1〜2点を選ぶ」が残らない（厚み指示と矛盾するため）", () => {
-        const out = applyPremiumPrompt(DEFAULT_PROMPT)
+    it("「最も噛み合う1〜2点を選ぶ」があれば「噛み合う点を2〜3点選び」に差し替える（厚み指示と矛盾するため）", () => {
+        // DEFAULT_PROMPT自体はこの文言をもう含まないが、ユーザーが自作テンプレートに
+        // 旧来の言い回しを残していた場合でも矛盾を解消できることを検証する。
+        const template = "テンプレ本文\n最も噛み合う1〜2点を選ぶ\n続き"
+        const out = applyPremiumPrompt(template)
         expect(out).not.toContain("最も噛み合う1〜2点を選ぶ")
         expect(out).toContain("噛み合う点を2〜3点選び")
     })
