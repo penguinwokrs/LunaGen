@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   CONTINUOUS_CONVERSATION_PROMPT,
   DEFAULT_PROMPT,
+  FOCUS_TOPIC_INSTRUCTION,
   LEGACY_CONTINUOUS_PROMPT_V1,
   LEGACY_DEFAULT_PROMPT_V1
 } from "./constants"
@@ -44,6 +45,26 @@ describe("DEFAULT_PROMPT", () => {
   it("プレミアム加工が効く文字数指定の文面を持つ", () => {
     // utils/premium.ts の applyPremiumPrompt が置換対象にする文面
     expect(DEFAULT_PROMPT).toContain("200文字以内")
+  })
+})
+
+describe("FOCUS_TOPIC_INSTRUCTION", () => {
+  it("{focus_topic}プレースホルダを持つ", () => {
+    expect(FOCUS_TOPIC_INSTRUCTION).toContain("{focus_topic}")
+  })
+
+  it("旧見出し名「需給マッチ分析」を含まない", () => {
+    expect(FOCUS_TOPIC_INSTRUCTION).not.toContain("需給マッチ分析")
+  })
+
+  it("新見出し名「プロフィール項目の突き合わせ」を含む", () => {
+    expect(FOCUS_TOPIC_INSTRUCTION).toContain("プロフィール項目の突き合わせ")
+  })
+
+  it("素材外の話題を禁止する制約に対する例外である旨を持つ", () => {
+    expect(FOCUS_TOPIC_INSTRUCTION).toContain(
+      "この話題はユーザーの明示指定なので、「相手のプロフィールに無い話題を持ち出さない」制約の例外として扱う"
+    )
   })
 })
 
