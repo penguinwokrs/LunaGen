@@ -2,11 +2,12 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1 } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
 import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
 import { addLog } from "./utils/logger"
+import { migratePrompt } from "./utils/prompt-migration"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
 
@@ -420,3 +421,25 @@ async function generateWithOllama(prompt: string, model: string, baseURL: string
     throw new Error(described.message)
   }
 }
+
+/**
+ * 拡張のインストール・更新時に、未編集のプロンプトを新デフォルトへ追従させる。
+ * ユーザーが編集済みなら何もしない（migratePrompt が null を返す）。
+ */
+chrome.runtime.onInstalled.addListener(async () => {
+  const targets: { key: string; legacy: string; next: string }[] = [
+    { key: "promptTemplate", legacy: LEGACY_DEFAULT_PROMPT_V1, next: DEFAULT_PROMPT },
+    { key: "continuousPromptTemplate", legacy: LEGACY_CONTINUOUS_PROMPT_V1, next: CONTINUOUS_CONVERSATION_PROMPT }
+  ]
+
+  for (const { key, legacy, next } of targets) {
+    const stored = await storage.get<string>(key)
+    const migrated = migratePrompt(stored, legacy, next)
+    if (migrated !== null) {
+      await storage.set(key, migrated)
+      await logBG("info", `Prompt migrated to new default: ${key}`)
+    } else {
+      await logBG("info", `Prompt kept (user-edited): ${key}`)
+    }
+  }
+})
