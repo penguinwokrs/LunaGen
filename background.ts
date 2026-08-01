@@ -215,7 +215,7 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
         attempt++
         const len = result.text.length
         const retryPrompt = len < FLOOR
-          ? `${prompt}\n\n【再生成指示】前回は${len}文字で、上限500に対して短すぎます。話題やエピソードを増やし、上限500を超えない範囲で${FLOOR}〜${CAP}文字（できるだけ500に近づける）にしてください。`
+          ? `${prompt}\n\n【再生成指示】前回は${len}文字で、上限500に対して短すぎます。選んだ一節の掘り下げと自分の開示を厚くして、上限500を超えない範囲で${FLOOR}〜${CAP}文字（できるだけ500に近づける）にしてください。`
           : `${prompt}\n\n【再生成指示】前回は${len}文字で上限500を超えています。内容を保ちつつ${FLOOR}〜${CAP}文字に収めてください。`
         await logBG("info", `Premium retry ${attempt}: ${len} chars → aiming ${FLOOR}-${CAP}`)
         const next = await generateOnce(retryPrompt)

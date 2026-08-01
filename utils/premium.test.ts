@@ -65,4 +65,30 @@ describe("applyPremiumPrompt", () => {
         expect(out).toContain("# 文字数制約（最重要）")
         expect(out).toContain("490〜500文字")
     })
+
+    describe("DEFAULT_PROMPT との組み合わせ（本番プロンプトでの検証）", () => {
+        // 合成テンプレート文字列だけでなく、実際に本番で使われる DEFAULT_PROMPT を
+        // そのまま入力して検証する。新プロンプトの最重要ルール「相手が書いていない話題を
+        // 自分から持ち出さない」と、プレミアム加工の追記内容が矛盾しないことを保証するため。
+        const out = applyPremiumPrompt(DEFAULT_PROMPT)
+
+        it("490〜500文字の文字数指定を含む", () => {
+            expect(out).toContain("490〜500文字")
+        })
+
+        it("話題の数を2〜3個に増やす指示を含まない（矛盾するため）", () => {
+            expect(out).not.toContain("2〜3個取り上げ")
+            expect(out).not.toContain("噛み合う点を2〜3点選び")
+        })
+
+        it("素材外の話題を持ち出さない制約が残っている", () => {
+            expect(out).toContain("相手が書いていない話題を自分から持ち出さない")
+            expect(out).toContain("相手のプロフィールに無い話題を持ち出すこと（最重要）")
+        })
+
+        it("内容の厚みは一節の掘り下げと自己開示で埋める指示になっている（新しい話題を足す指示ではない）", () => {
+            expect(out).toContain("選んだ一節の掘り下げと自分の開示を厚くして埋める")
+            expect(out).not.toContain("エピソードを添えて掘り下げ")
+        })
+    })
 })
