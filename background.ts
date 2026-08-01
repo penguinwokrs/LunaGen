@@ -2,10 +2,10 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, FOCUS_TOPIC_INSTRUCTION, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
-import { applyPremiumPrompt } from "./utils/premium"
+import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
 import { addLog } from "./utils/logger"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -144,61 +144,22 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
     promptTemplate = await storage.get<string>("promptTemplate") || DEFAULT_PROMPT
   }
 
-  let prompt = promptTemplate
+  let prompt = buildMessagePrompt({
+    template: promptTemplate,
+    myProfile,
+    targetProfile,
+    targetName,
+    chatHistory,
+    demandSupplyHint,
+    focusTopic,
+    isPremium
+  })
 
   if (isPremium) {
-    prompt = applyPremiumPrompt(prompt)
     await logBG("info", "Premium message: Limit expanded to 500 characters (aim for near-limit)")
   }
-
-  prompt = prompt
-    .replace("{my_info_clean}", myProfile)
-    .replace("{target_info_clean}", targetProfile)
-
-  // Replace [相手の名前] with actual name or "ゲスト"
-  const nameToUse = targetName && targetName.trim() ? targetName.trim() : "ゲスト"
-  prompt = prompt.split("[相手の名前]").join(nameToUse)
-
-  if (chatHistory) {
-    prompt = prompt.replace("{chat_history}", chatHistory)
-  }
-
-  // Build structured analysis section before target profile
-  {
-    const analysisSections: string[] = []
-
-    // 0. ユーザーがメッセージ入力欄に書いた優先話題（最優先で先頭に置く）
-    if (focusTopic && String(focusTopic).trim()) {
-      analysisSections.push(FOCUS_TOPIC_INSTRUCTION.replace("{focus_topic}", String(focusTopic).trim()))
-      await logBG("info", "Focus topic supplied from message box", { focusTopic: String(focusTopic).trim() })
-    }
-
-    // 1. 需給マッチ分析（双方向の噛み合い点）
-    if (demandSupplyHint) {
-      analysisSections.push(`# 需給マッチ分析\n${demandSupplyHint}`)
-    }
-
-    // 2. 相手が自由記述した求める条件（補足。初回メッセージのみ）
-    if (!chatHistory && targetProfile.includes("【求める条件】")) {
-      const reqMatch = targetProfile.match(/【求める条件】\n([\s\S]*?)(?=\n【|$)/)
-      if (reqMatch) {
-        const reqText = reqMatch[1].trim()
-        analysisSections.push(
-          `# 補足: 相手が自由記述した求める条件\n以下は相手が自ら書いた「求める条件」です。需給マッチ分析と併せて参考にすること。\n\n${reqText}`
-        )
-      }
-    }
-
-    // Insert analysis before target profile section
-    if (analysisSections.length > 0) {
-      const analysisBlock = analysisSections.join("\n\n")
-      const marker = "# 相手のプロフィール"
-      if (prompt.includes(marker)) {
-        prompt = prompt.replace(marker, `${analysisBlock}\n\n${marker}`)
-      } else {
-        prompt += `\n\n${analysisBlock}`
-      }
-    }
+  if (focusTopic && String(focusTopic).trim()) {
+    await logBG("info", "Focus topic supplied from message box", { focusTopic: String(focusTopic).trim() })
   }
 
   // Sanitize prompt to avoid Safety/Prohibited Content errors
@@ -210,12 +171,8 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
 
   const replacementRulesEnabled = await storage.get<boolean>("replacementRulesEnabled") ?? true
   if (replacementRulesEnabled) {
-    const replacementRules = await storage.get<{ from: string; to: string }[]>("replacementRules") || defaultReplacementRules
-    replacementRules.forEach(rule => {
-      if (rule.from) {
-        prompt = prompt.split(rule.from).join(rule.to || "")
-      }
-    })
+    const rules = await storage.get<{ from: string; to: string }[]>("replacementRules") || defaultReplacementRules
+    prompt = applyReplacementRules(prompt, rules)
   }
 
   if (!prompt || prompt.length < 50) {
