@@ -100,6 +100,50 @@ const injectedButtons = new Map<
 /**
  * 対象ページの textarea に生成ボタンを注入する
  */
+/**
+ * ボタンをどこに挿すかを決める。
+ *
+ * 素直に textarea の親へ足すと、マッチ後のメッセージ画面では親が
+ * `display:flex / flex-direction:row / flex-wrap:nowrap` の form なので、
+ * ボタンが入力欄と横並びになって入力欄が潰れる
+ * （2026-08-03 実測: 540px の行で textarea が 225px まで縮んでいた）。
+ *
+ * 親が折り返さない横並びの flex なら、その親自身を折り返させて、ボタンを1行目に置く。
+ * 入力欄は2行目へ回るので、幅を取り合わなくなる。
+ *
+ * form の外に出す案は使えない。メッセージ画面の form は `position: sticky` で画面下端に
+ * 貼り付いており、DOM上その直後に置くとボタンが画面外へ（実測 y=910 / 表示領域900px）、
+ * 直前に置くと sticky な form の下に潜り込む（実測 838〜867 が form の 830〜900 と重なり、
+ * elementFromPoint が form を返した）。form の中に入れておけば sticky に追随する。
+ * それ以外（プロフィールページ等の通常のブロック）は従来どおり親の末尾に足す。
+ */
+function insertButtonContainer(textarea: HTMLTextAreaElement, container: HTMLElement) {
+  const parent = textarea.parentElement
+  if (!parent) return
+
+  const cs = getComputedStyle(parent)
+  const isRowFlex =
+    (cs.display === "flex" || cs.display === "inline-flex") &&
+    cs.flexDirection.startsWith("row") &&
+    cs.flexWrap === "nowrap"
+
+  if (isRowFlex) {
+    // 親を折り返し可にして、幅100%のボタン行を1行目に置く。入力欄は2行目へ回る
+    parent.style.flexWrap = "wrap"
+    container.style.flexBasis = "100%"
+    container.style.width = "100%"
+    container.style.marginBottom = "6px"
+    parent.insertBefore(container, parent.firstChild)
+
+    // 入力欄は flex-basis:auto かつ width:100% で1行を占有するため、そのままだと
+    // 送信ボタンがさらに次の行へ落ちる。基準幅を0にして送信ボタンと同じ行に収める
+    // （flex-grow は元から1なので、残り幅いっぱいに広がる）。
+    textarea.style.flexBasis = "0"
+  } else {
+    parent.appendChild(container)
+  }
+}
+
 function injectButtons() {
   // 相手のプロフィールページ または メッセージページ である場合のみボタンを挿入
   const isTargetPage =
@@ -115,7 +159,7 @@ function injectButtons() {
     textarea.dataset.lunaAiInjected = "true"
 
     const container = document.createElement("div")
-    textarea.parentElement?.appendChild(container)
+    insertButtonContainer(textarea, container)
     const root = createRoot(container)
     root.render(<GenerateButton textarea={textarea} />)
     injectedButtons.set(textarea, { root, container })
