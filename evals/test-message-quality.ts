@@ -40,6 +40,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 
 import { replacementRules } from "../assets/replacement_rules"
 import { DEFAULT_PROMPT, LEGACY_DEFAULT_PROMPT_V1 } from "../constants"
+import { formatCardsSection } from "../utils/cards"
 import { generateDemandSupplyHint } from "../utils/demand-supply"
 import { applyReplacementRules, buildMessagePrompt } from "../utils/message-prompt"
 import { extractProfileFromJSON } from "../utils/profile"
@@ -248,30 +249,49 @@ try {
 }
 const myProfileText = extractProfileFromJSON(myRaw)
 
-const VARIANTS = [
-  { name: "legacy", template: LEGACY_DEFAULT_PROMPT_V1 },
-  { name: "new", template: DEFAULT_PROMPT }
-]
+/**
+ * EVAL_VARIANTS=cards で「好みのカードあり / なし」の比較に切り替える。
+ * どちらも新プロンプトを使い、カードを素材に入れるかどうかだけを変える。
+ * コーパスは WITH_CARDS=1 で収集したもの（_cards / _commonCards を持つ）が必要。
+ */
+const CARD_MODE = process.env.EVAL_VARIANTS === "cards"
+
+const VARIANTS: { name: string; template: string; useCards: boolean }[] = CARD_MODE
+  ? [
+      { name: "legacy", template: DEFAULT_PROMPT, useCards: false },
+      { name: "new", template: DEFAULT_PROMPT, useCards: true }
+    ]
+  : [
+      { name: "legacy", template: LEGACY_DEFAULT_PROMPT_V1, useCards: false },
+      { name: "new", template: DEFAULT_PROMPT, useCards: false }
+    ]
 
 const results: any[] = []
 
 for (const target of corpus) {
-  const targetProfileText = extractProfileFromJSON(target)
+  const baseProfileText = extractProfileFromJSON(target)
+  const ownCards: string[] = Array.isArray(target._cards) ? target._cards : []
+  const commonCards: string[] = Array.isArray(target._commonCards) ? target._commonCards : []
+  // カード無しの腕でも、汎用性の比較対象として同じ相手を使う
+  const targetProfileText = baseProfileText
   if (!targetProfileText || targetProfileText.length < 5) continue
   const ngText = String(target.text_my_ng ?? target.ng ?? "")
-  const hint = generateDemandSupplyHint(myRaw, target, {})
+  const hintWithoutCards = generateDemandSupplyHint(myRaw, target, {})
+  const hintWithCards = generateDemandSupplyHint(myRaw, target, {}, commonCards)
   const others = corpus.filter((u) => u.id !== target.id).slice(0, 3).map((u) => extractProfileFromJSON(u))
 
   for (const variant of VARIANTS) {
     let prompt = buildMessagePrompt({
       template: variant.template,
       myProfile: myProfileText,
-      targetProfile: targetProfileText,
+      targetProfile: variant.useCards
+        ? targetProfileText + formatCardsSection(ownCards)
+        : targetProfileText,
       // 「ぴの」を使う: 名前から食べ物（ピノ＝アイスの商品名）を連想する実害バグ（修正A）を
       // このハーネスで再現・検出するため。旧プロンプトでは「アイス」等が出て飲食グループの検出に
       // 引っかかり、新プロンプトでは出ないことが期待される挙動。
       targetName: "ぴの",
-      demandSupplyHint: hint
+      demandSupplyHint: variant.useCards ? hintWithCards : hintWithoutCards
     })
     prompt = applyReplacementRules(prompt, replacementRules)
 
@@ -289,7 +309,13 @@ for (const target of corpus) {
       continue
     }
 
-    const checks = checkMessage(message, targetProfileText, ngText)
+    // カードを素材に入れた腕では、判定の参照プロフィールにもカードを含める。
+    // 含めないと、カード由来の語が「プロフィールに無い語」と見なされ、固有度が
+    // 不当に下がり、素材外話題の誤検出も起きる（2026-08-02 の実測で判明）。
+    const profileForChecks = variant.useCards
+      ? targetProfileText + formatCardsSection(ownCards) + formatCardsSection(commonCards)
+      : targetProfileText
+    const checks = checkMessage(message, profileForChecks, ngText)
     const judge = await judgeAsRecipient(message, targetProfileText)
     const genericityJudgements: GenericityJudgement[] = []
     for (const other of others) genericityJudgements.push(await judgeGenericity(message, other))

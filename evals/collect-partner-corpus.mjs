@@ -65,8 +65,17 @@ const ALLOW_EXACT = new Set([
 const ALLOW_PREFIXES = ["q_", "conditions_", "relationship", "text_"]
 
 /** 目標: 各層10件以上かつ合計50件以上 */
-const TARGET_PER_STRATUM = 10
-const TARGET_TOTAL = 50
+const TARGET_PER_STRATUM = Number(process.env.CORPUS_PER_STRATUM || 10)
+const TARGET_TOTAL = Number(process.env.CORPUS_TARGET || 50)
+
+/**
+ * WITH_CARDS=1 で「好みのカード」も一緒に集める。
+ * 相手ごとに追加リクエストが要る（相手のカード最大3ページ＋共通カード）ので既定は無効。
+ * 収集したカードは `_cards` / `_commonCards` として匿名化レコードに付ける。
+ */
+const WITH_CARDS = process.env.WITH_CARDS === "1"
+const MAX_OWN_CARD_PAGES = 3
+const MAX_COMMON_CARD_PAGES = 10
 
 /** 新規ユーザーがこの件数増えるごとに自動保存する */
 const AUTOSAVE_EVERY_N = 5
@@ -77,6 +86,13 @@ const AUTOSAVE_INTERVAL_MS = 60_000
 const INTRO_FIELDS = ["profile", "introduction", "intro", "body"]
 
 const users = new Map() // hashedId -> anonymized user
+/**
+ * ログイン中の自分のユーザーID。
+ * /api/user/get/me も /api/user/ 配下なので、素通しにすると自分のプロフィールが
+ * コーパスに混ざる（2026-08-02 の実収集で実際に混入していた）。自分宛のメッセージを
+ * 生成して評価してしまうので必ず除外する。
+ */
+let selfUserId = null
 let lastSavedSize = 0
 /** id相当の値がプリミティブでなかったためスキップしたレコード数（ハッシュ衝突回避） */
 let skippedNonPrimitiveId = 0
@@ -243,6 +259,52 @@ const autosaveTimer = setInterval(() => {
   }
 }, AUTOSAVE_INTERVAL_MS)
 
+
+/**
+ * 相手の好みのカードを、ログイン済みのページ内から取得する。
+ * 同一オリジンで叩く必要があるので page.evaluate 経由。
+ */
+async function fetchCards(page, rawId) {
+  if (rawId === undefined || rawId === null) return { own: [], common: [] }
+  try {
+    return await page.evaluate(
+      async ([id, maxOwn, maxCommon]) => {
+        const parse = (j) => {
+          const l = j?.user_card_list ?? j?.card_list
+          if (!l || !Array.isArray(l.data)) return null
+          return {
+            names: l.data.map((c) => (typeof c?.name === "string" ? c.name.trim() : "")).filter(Boolean),
+            last: Number(l.last_page) > 0 ? Number(l.last_page) : 1
+          }
+        }
+        const collect = async (kind, max) => {
+          const seen = new Set()
+          const out = []
+          const get = async (p) => {
+            try {
+              const r = await fetch(`/api/user/${kind}/card/get/${id}?page=${p}`)
+              return r.ok ? parse(await r.json()) : null
+            } catch { return null }
+          }
+          const first = await get(1)
+          if (!first) return out
+          for (const n of first.names) if (!seen.has(n)) { seen.add(n); out.push(n) }
+          for (let p = 2; p <= Math.min(first.last, max); p++) {
+            const x = await get(p)
+            if (!x) break
+            for (const n of x.names) if (!seen.has(n)) { seen.add(n); out.push(n) }
+          }
+          return out
+        }
+        return { own: await collect("your", maxOwn), common: await collect("common", maxCommon) }
+      },
+      [String(rawId), MAX_OWN_CARD_PAGES, MAX_COMMON_CARD_PAGES]
+    )
+  } catch {
+    return { own: [], common: [] }
+  }
+}
+
 const context = await chromium.launchPersistentContext(PROFILE_DIR, {
   channel: "chromium",
   // 手動モードでは人がスクロールするので表示が要る。自動巡回モードは表示不要。
@@ -267,6 +329,13 @@ context.on("response", async (res) => {
     } catch {
       return
     }
+    // 自分のIDを覚えて、以降のハーベストから除外する
+    if (url.includes("/api/user/get/me")) {
+      const me = json?.user ?? json
+      const id = me?.id ?? me?.user_id
+      if (id !== undefined && id !== null) selfUserId = String(id)
+    }
+
     const found = []
     harvest(json, found)
     let added = 0
@@ -276,6 +345,7 @@ context.on("response", async (res) => {
       // （後勝ちで前のレコードが静かに消える）。安定した一意性が得られないので、
       // anonymize() に渡す前にここで弾く。
       const rawId = u.id ?? u.user_id
+      if (selfUserId !== null && String(rawId) === selfUserId) continue // 自分は入れない
       if (rawId !== undefined && rawId !== null && !isPrimitiveId(rawId)) {
         skippedNonPrimitiveId++
         console.warn(
@@ -285,6 +355,12 @@ context.on("response", async (res) => {
         continue
       }
       const a = anonymize(u)
+      if (WITH_CARDS && !users.has(a.id)) {
+        const rawId = u.id ?? u.user_id
+        const cards = await fetchCards(page, rawId)
+        a._cards = cards.own
+        a._commonCards = cards.common
+      }
       if (!users.has(a.id)) {
         users.set(a.id, a)
         added++
