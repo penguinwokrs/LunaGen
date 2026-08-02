@@ -1,5 +1,8 @@
 import React from "react"
 
+import { Section } from "../Common/Section"
+import { descriptionStyle, subtleButtonStyle, textAreaStyle } from "../Common/formStyles"
+
 interface PromptTemplateSectionProps {
     promptTemplate: string
     setPromptTemplate: (val: string) => void
@@ -18,23 +21,15 @@ export const PromptTemplateSection = ({
     const [activeTab, setActiveTab] = React.useState<"initial" | "continuous">("initial")
     const [resetKey, setResetKey] = React.useState(0)
     return (
-        <section style={{ marginBottom: "30px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h2 style={{ fontSize: "1.2rem" }}>2. プロンプトテンプレート</h2>
+        <Section title="">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h2 style={{ fontSize: "1.2rem", margin: 0 }}>2. プロンプトテンプレート</h2>
                 <button
                     onClick={() => {
                         onReset()
                         setResetKey(prev => prev + 1)
                     }}
-                    style={{
-                        padding: "4px 8px",
-                        backgroundColor: "#f8f9fa",
-                        border: "1px solid #ddd",
-                        borderRadius: "4px",
-                        cursor: "pointer",
-                        fontSize: "0.8rem",
-                        color: "#666"
-                    }}
+                    style={subtleButtonStyle}
                 >
                     デフォルトに戻す
                 </button>
@@ -71,7 +66,7 @@ export const PromptTemplateSection = ({
                 </button>
             </div>
 
-            <div style={{ fontSize: "0.85em", color: "#666", marginBottom: "10px" }}>
+            <div style={descriptionStyle}>
                 以下の変数は自動的に置換されます:<br />
                 <code style={{ background: "#eee", padding: "2px 4px" }}>{`{my_info_clean}`}</code> : 自分のプロフィール<br />
                 <code style={{ background: "#eee", padding: "2px 4px" }}>{`{target_info_clean}`}</code> : 相手のプロフィール
@@ -81,7 +76,7 @@ export const PromptTemplateSection = ({
                     </>
                 )}
             </div>
-            <details style={{ fontSize: "0.8em", color: "#888", marginBottom: "10px" }}>
+            <details style={{ fontSize: "0.8rem", color: "#888", marginBottom: "12px" }}>
                 <summary style={{ cursor: "pointer", color: "#e91e63" }}>
                     プロフィール変数に含まれる情報
                 </summary>
@@ -105,7 +100,7 @@ export const PromptTemplateSection = ({
                     defaultValue={promptTemplate}
                     onChange={(e) => setPromptTemplate(e.target.value)}
                     rows={12}
-                    style={{ width: "100%", padding: "10px", boxSizing: "border-box", fontFamily: "monospace", lineHeight: "1.4" }}
+                    style={textAreaStyle}
                 />
             ) : (
                 <textarea
@@ -113,9 +108,9 @@ export const PromptTemplateSection = ({
                     defaultValue={continuousPromptTemplate}
                     onChange={(e) => setContinuousPromptTemplate(e.target.value)}
                     rows={12}
-                    style={{ width: "100%", padding: "10px", boxSizing: "border-box", fontFamily: "monospace", lineHeight: "1.4" }}
+                    style={textAreaStyle}
                 />
             )}
-        </section>
+        </Section>
     )
 }

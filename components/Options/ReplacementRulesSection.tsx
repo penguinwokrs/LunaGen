@@ -1,6 +1,7 @@
 import React from "react"
 import { Section } from "../Common/Section"
 import { ImeSafeField } from "../Common/ImeSafeField"
+import { descriptionStyle, fieldStyle } from "../Common/formStyles"
 import { replacementRules as defaultRules } from "../../assets/replacement_rules"
 
 export type ReplacementRule = { from: string; to: string }
@@ -59,7 +60,7 @@ export const ReplacementRulesSection = ({ enabled, setEnabled, rules, setRules }
             </div>
             {enabled ? (
                 <>
-                    <p style={{ fontSize: "0.85rem", color: "#666", margin: "0 0 12px" }}>
+                    <p style={descriptionStyle}>
                         AIに送信するプロンプト内の対象ワードを置き換えワードに自動変換します。置き換えワードを空にすると削除されます。
                     </p>
                     <p style={{ fontSize: "0.8rem", color: "#e67e22", margin: "0 0 12px", padding: "8px 10px", backgroundColor: "#fff8e1", border: "1px solid #ffe0b2", borderRadius: "4px", lineHeight: "1.5" }}>
@@ -80,20 +81,14 @@ export const ReplacementRulesSection = ({ enabled, setEnabled, rules, setRules }
                                     value={rule.from}
                                     onChange={(v) => handleChange(index, "from", v)}
                                     placeholder="対象ワード"
-                                    style={{
-                                        flex: 1, padding: "8px", borderRadius: "4px",
-                                        border: "1px solid #ccc", outline: "none", fontSize: "0.9rem",
-                                    }}
+                                    style={{ ...fieldStyle, flex: 1 }}
                                 />
                                 <span style={{ color: "#999", fontSize: "0.9rem" }}>/</span>
                                 <ImeSafeField
                                     value={rule.to}
                                     onChange={(v) => handleChange(index, "to", v)}
                                     placeholder="置き換えワード"
-                                    style={{
-                                        flex: 1, padding: "8px", borderRadius: "4px",
-                                        border: "1px solid #ccc", outline: "none", fontSize: "0.9rem",
-                                    }}
+                                    style={{ ...fieldStyle, flex: 1 }}
                                 />
                                 <button
                                     onClick={() => handleRemove(index)}
