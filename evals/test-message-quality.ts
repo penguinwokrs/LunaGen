@@ -17,7 +17,7 @@
  *   node test-results/message-eval/eval.bundle.mjs
  * モデル変更:
  *   EVAL_MODEL=gemini-2.5-pro       … 生成に使うモデル
- *   EVAL_JUDGE_MODEL=gemini-2.5-pro … 審査（返信意欲・汎用性）に使うモデル
+ *   EVAL_JUDGE_MODEL=gemini-2.5-pro … 審査（返信するか・汎用性）に使うモデル
  *
  * モデルの既定値について（2026-08-02 オーナー指示）:
  *   生成・審査とも gemini-3.5-flash 以上を既定とする。gemini-2.5-flash は
@@ -163,13 +163,29 @@ function checkMessage(message: string, targetProfileText: string, ngText: string
 // ===== LLM審査 =====
 
 interface RecipientJudgement {
-  replyIntent: number | null
+  /** 実際に返信するか（行動の予測） */
+  wouldReply: boolean | null
+  /** 連絡先を交換するところまで行くか。Matz et al. が予測対象にした指標 */
+  wouldExchangeContact: boolean | null
+  /** 読まれた感。好意度とは別の構成概念なので5段階のまま残す */
   feltRead: number | null
   reason: string
   /** JSONパースに失敗した場合true。集計から除外し、独立カウントするためのフラグ。 */
   parseFailed: boolean
 }
 
+/**
+ * 受信者になりきって行動を予測させる。
+ *
+ * 好意度の5段階（旧設計）は4回の測定すべてで4.5〜5.0に張り付き、判断材料にならなかった。
+ * Matz et al. (2026, Scientific Reports) は964回のスピードデートで、LLMが連絡先交換の
+ * 成否を人間の判定者と同等（r=0.12〜0.23）に予測できると報告している。行動の二値予測に
+ * 変えたところ、実際に弁別するようになった（定型文・不躾な文は false、具体的な文は true）。
+ *
+ * 注意: 二値判定は1件あたり3回に1回ほど揺れる（校正時の実測）。個別の判定は信用せず、
+ * 40件以上での「率」として読むこと。「迷ったら送らない側に倒す」のような保守寄りの
+ * 誘導を入れると全件 false に倒れて弁別しなくなるので入れない。
+ */
 async function judgeAsRecipient(message: string, profileText: string): Promise<RecipientJudgement> {
   const prompt = `あなたは以下のプロフィールの人物です。マッチングサイトでこのメッセージを受け取りました。
 
@@ -179,8 +195,11 @@ ${profileText}
 # 受け取ったメッセージ
 ${message}
 
+好感度ではなく「実際に返信するかどうか」という行動として答えてください。
+あなたなら実際どうするかを、正直に予測してください。
+
 以下のJSONのみを出力してください（説明不要）:
-{"replyIntent": 1〜5の整数（5=すぐ返信したい, 1=返信しない）, "feltRead": 1〜5の整数（5=自分のプロフィールを読んで書かれたと強く感じる）, "reason": "50字以内の理由"}`
+{"wouldReply": true または false（実際に返信するか）, "wouldExchangeContact": true または false（やり取りを続けて連絡先を交換するところまで行きそうか）, "feltRead": 1〜5の整数（5=自分のプロフィールを読んで書かれたと強く感じる）, "reason": "50字以内の理由"}`
   // 審査プロンプトにも相手のプロフィール本文が入るため、安全フィルタで
   // PROHIBITED_CONTENT ブロックが起きる（2026-08-02 実測、gemini-3.5-flash）。
   // ここで例外を素通しすると評価全体が途中で落ちるので、判定失敗として扱う。
@@ -188,16 +207,22 @@ ${message}
   try {
     raw = await gen(prompt, JUDGE_MODEL)
   } catch (e: any) {
-    return { replyIntent: null, feltRead: null, reason: `api failed: ${String(e?.message ?? e).slice(0, 80)}`, parseFailed: true }
+    return { wouldReply: null, wouldExchangeContact: null, feltRead: null, reason: `api failed: ${String(e?.message ?? e).slice(0, 80)}`, parseFailed: true }
   }
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim())
-    return { replyIntent: parsed.replyIntent, feltRead: parsed.feltRead, reason: parsed.reason, parseFailed: false }
+    return {
+      wouldReply: parsed.wouldReply === true,
+      wouldExchangeContact: parsed.wouldExchangeContact === true,
+      feltRead: parsed.feltRead,
+      reason: parsed.reason,
+      parseFailed: false
+    }
   } catch {
     // パース失敗は「実在する最低点」でも「最高点」でもない欠損値。
     // ここで0点や5点相当の値を混ぜると集計が歪むので、呼び出し側で
     // parseFailed を見て平均・rate の両方から除外すること。
-    return { replyIntent: null, feltRead: null, reason: `parse failed: ${raw.slice(0, 80)}`, parseFailed: true }
+    return { wouldReply: null, wouldExchangeContact: null, feltRead: null, reason: `parse failed: ${raw.slice(0, 80)}`, parseFailed: true }
   }
 }
 
@@ -338,7 +363,10 @@ for (const target of corpus) {
       genericityRate,
       genericityParseFailures
     })
-    log(`${target.id} / ${variant.name}: ${checks.length}字 offTopic=${checks.offTopic.length} reply=${judge.replyIntent}`)
+    log(
+      `${target.id} / ${variant.name}: ${checks.length}字 offTopic=${checks.offTopic.length} ` +
+        `reply=${judge.parseFailed ? "?" : judge.wouldReply ? "yes" : "no"}`
+    )
   }
 }
 
@@ -377,11 +405,9 @@ function summarize(variant: string) {
     ngMentions: rows.filter((r) => r.checks.ngMentioned.length > 0).length,
     avgSpecificity: avgOver(rows, (r) => r.checks.specificityRatio),
     judgeParseFailures,
-    avgReplyIntent: avgOver(judgeValidRows, (r) => r.judge.replyIntent),
+    replyRate: avgOver(judgeValidRows, (r) => (r.judge.wouldReply ? 1 : 0)),
+    contactExchangeRate: avgOver(judgeValidRows, (r) => (r.judge.wouldExchangeContact ? 1 : 0)),
     avgFeltRead: avgOver(judgeValidRows, (r) => r.judge.feltRead),
-    lowReplyIntentRate: judgeValidRows.length === 0
-      ? null
-      : judgeValidRows.filter((r) => r.judge.replyIntent <= 2).length / judgeValidRows.length,
     genericityJudgeParseFailures,
     avgGenericity: avgOver(genericityValidRows, (r) => r.genericityRate)
   }
@@ -418,18 +444,15 @@ const genericityVerdict = verdict(
   (v) => v <= 0.2,
   (v) => `FAIL (${(v * 100).toFixed(0)}%)`
 )
-const replyIntentVerdict = verdict(
-  fresh.inconclusive,
-  fresh.avgReplyIntent,
-  (v) => v >= 4,
-  (v) => `FAIL (${v.toFixed(2)})`
-)
-const lowReplyIntentVerdict = verdict(
-  fresh.inconclusive,
-  fresh.lowReplyIntentRate,
-  (v) => v <= 0.1,
-  (v) => `FAIL (${(v * 100).toFixed(0)}%)`
-)
+// 返信率・連絡先交換率は絶対値の閾値を置かない。審査LLMの水準が分からないうちに
+// 基準を決めると、基準の方が間違っていても気づけない。旧プロンプトとの差で見る。
+const pct = (v: number | null) => (v === null ? "N/A" : `${(v * 100).toFixed(0)}%`)
+const diffVerdict = (label: string, a: number | null, b: number | null) => {
+  if (fresh.inconclusive || a === null || b === null) return `${label}: INCONCLUSIVE（有効な評価データなし）`
+  const d = (b - a) * 100
+  const sign = d > 0 ? "+" : ""
+  return `${label}: ${pct(a)} → ${pct(b)}（${sign}${d.toFixed(0)}pt）`
+}
 const mechanicalVerdict = fresh.inconclusive
   ? "INCONCLUSIVE（有効な評価データなし）"
   : (fresh.overLength + fresh.notQuestion + fresh.bannedHits + fresh.ngMentions === 0 ? "PASS" : "FAIL")
@@ -451,10 +474,10 @@ ${row("？で終わっていない", legacy.notQuestion, fresh.notQuestion)}
 ${row("禁止表現あり", legacy.bannedHits, fresh.bannedHits)}
 ${row("NG言及あり", legacy.ngMentions, fresh.ngMentions)}
 ${row("固有度（参考）", legacy.avgSpecificity, fresh.avgSpecificity)}
-${row("審査JSONパース失敗（返信意欲/読まれた感）", legacy.judgeParseFailures, fresh.judgeParseFailures)}
-${row("返信意欲 平均（パース失敗除く）", legacy.avgReplyIntent, fresh.avgReplyIntent)}
+${row("審査JSONパース失敗（返信/読まれた感）", legacy.judgeParseFailures, fresh.judgeParseFailures)}
+${row("返信する と判定された割合", legacy.replyRate, fresh.replyRate)}
+${row("連絡先交換まで行くと判定された割合", legacy.contactExchangeRate, fresh.contactExchangeRate)}
 ${row("読まれた感 平均（パース失敗除く）", legacy.avgFeltRead, fresh.avgFeltRead)}
-${row("返信意欲2以下の割合（パース失敗除く）", legacy.lowReplyIntentRate, fresh.lowReplyIntentRate)}
 ${row("審査JSONパース失敗（汎用性）", legacy.genericityJudgeParseFailures, fresh.genericityJudgeParseFailures)}
 ${row("汎用性（他人成立率・パース失敗除く）", legacy.avgGenericity, fresh.avgGenericity)}
 
@@ -465,8 +488,10 @@ INCONCLUSIVE（判定不能）と表示する。INCONCLUSIVE を PASS として�
 
 - 素材外話題 0件 → ${offTopicVerdict}
 - 汎用性 20%以下 → ${genericityVerdict}
-- 返信意欲 平均4.0以上 → ${replyIntentVerdict}
-- 返信意欲2以下が10%以下 → ${lowReplyIntentVerdict}
+- ${diffVerdict("返信する割合", legacy.replyRate, fresh.replyRate)}
+- ${diffVerdict("連絡先交換まで行く割合", legacy.contactExchangeRate, fresh.contactExchangeRate)}
+  （この2つは絶対値の閾値を置かず、旧プロンプトとの差で見る。
+   n が小さいとノイズに埋もれるので、40件未満の測定では差を解釈しないこと）
 - 機械項目（超過/？/禁止表現/NG言及）全件pass → ${mechanicalVerdict}
 `
 
