@@ -259,6 +259,53 @@ JSONのみ出力: {"fitsThisPerson": true または false}`
   }
 }
 
+/**
+ * 対比較の審査。
+ *
+ * 1通ずつの絶対評価は、実際に測る対象がどれもLLM生成のそれなりの文なので
+ * 天井に張り付く（40件の実測で 63件 true / 2件 false）。校正時に
+ * 「明らかに悪い文」を混ぜて弁別を確認していたのが誤りで、
+ * 良い文どうしの優劣は判別できていなかった。
+ *
+ * 同じ相手への2通を並べて選ばせれば、必ず優劣が出る。天井効果への標準的な対処。
+ * 位置バイアスを避けるため提示順をランダム化し、どちらが先だったかを呼び出し側で持つ。
+ */
+async function judgePairwise(
+  profileText: string,
+  first: string,
+  second: string
+): Promise<"first" | "second" | null> {
+  const prompt = `あなたは以下のプロフィールの人物です。マッチングサイトで2人から初回メッセージを受け取りました。
+
+# あなたのプロフィール
+${profileText}
+
+# メッセージ1
+${first}
+
+# メッセージ2
+${second}
+
+どちらか一方にだけ返信するとしたら、どちらに返信しますか。
+好感度ではなく「実際にどちらへ返信するか」で選んでください。必ずどちらかを選んでください。
+
+JSONのみ出力: {"choice": 1 または 2, "reason": "40字以内の理由"}`
+  let raw: string
+  try {
+    raw = await gen(prompt, JUDGE_MODEL)
+  } catch {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim())
+    if (parsed.choice === 1) return "first"
+    if (parsed.choice === 2) return "second"
+    return null
+  } catch {
+    return null
+  }
+}
+
 // ===== メイン =====
 
 const corpus = JSON.parse(readFileSync(CORPUS, "utf8")).users as any[]
@@ -292,6 +339,8 @@ const VARIANTS: { name: string; template: string; useCards: boolean }[] = CARD_M
     ]
 
 const results: any[] = []
+/** 対比較の結果。{ id, winner: "new" | "legacy" | null, newFirst } */
+const pairwise: { id: string; winner: string | null; newFirst: boolean }[] = []
 
 for (const target of corpus) {
   const baseProfileText = extractProfileFromJSON(target)
@@ -303,7 +352,15 @@ for (const target of corpus) {
   const ngText = String(target.text_my_ng ?? target.ng ?? "")
   const hintWithoutCards = generateDemandSupplyHint(myRaw, target, {})
   const hintWithCards = generateDemandSupplyHint(myRaw, target, {}, commonCards)
-  const others = corpus.filter((u) => u.id !== target.id).slice(0, 3).map((u) => extractProfileFromJSON(u))
+  // 他人プロフィールは全文だと安全フィルタで判定が落ちる（40件の実測で 74/228 が失敗）。
+  // 汎用性の判定には人物像が分かる程度で足りるので先頭だけ渡す。
+  const others = corpus
+    .filter((u) => u.id !== target.id)
+    .slice(0, 3)
+    .map((u) => extractProfileFromJSON(u).slice(0, 600))
+
+  /** 対比較のために、この相手への両腕のメッセージを覚えておく */
+  const generated: Record<string, string> = {}
 
   for (const variant of VARIANTS) {
     let prompt = buildMessagePrompt({
@@ -352,6 +409,8 @@ for (const target of corpus) {
       ? null
       : validGenericity.filter((g) => g.fitsThisPerson === true).length / validGenericity.length
 
+    generated[variant.name] = message
+
     results.push({
       id: target.id,
       variant: variant.name,
@@ -363,10 +422,24 @@ for (const target of corpus) {
       genericityRate,
       genericityParseFailures
     })
+
     log(
       `${target.id} / ${variant.name}: ${checks.length}字 offTopic=${checks.offTopic.length} ` +
         `reply=${judge.parseFailed ? "?" : judge.wouldReply ? "yes" : "no"}`
     )
+  }
+
+  // --- 対比較 ---
+  // 同じ相手への2通を並べて選ばせる。絶対評価は天井に張り付くため、これが主指標。
+  if (generated["legacy"] && generated["new"]) {
+    // 提示順をランダム化して位置バイアスを打ち消す
+    const newFirst = Math.random() < 0.5
+    const first = newFirst ? generated["new"] : generated["legacy"]
+    const second = newFirst ? generated["legacy"] : generated["new"]
+    const pick = await judgePairwise(targetProfileText, first, second)
+    const winner = pick === null ? null : (pick === "first") === newFirst ? "new" : "legacy"
+    pairwise.push({ id: target.id, winner, newFirst })
+    log(`${target.id} / 対比較: ${winner ?? "判定失敗"}`)
   }
 }
 
@@ -416,6 +489,16 @@ function summarize(variant: string) {
 const legacy = summarize("legacy")
 const fresh = summarize("new")
 
+// --- 対比較の集計（主指標） ---
+const pairwiseValid = pairwise.filter((p) => p.winner !== null)
+const newWins = pairwiseValid.filter((p) => p.winner === "new").length
+const newWinRate = pairwiseValid.length === 0 ? null : newWins / pairwiseValid.length
+// 提示順による偏りが出ていないかの点検。0.5から大きくずれていたら位置バイアスを疑う
+const firstPositionWins = pairwiseValid.filter(
+  (p) => (p.winner === "new") === p.newFirst
+).length
+const firstPositionRate = pairwiseValid.length === 0 ? null : firstPositionWins / pairwiseValid.length
+
 const fmt = (v: any) => (v === null || v === undefined ? "N/A" : typeof v === "number" ? v.toFixed(2) : String(v))
 const row = (k: string, a: any, b: any) => `| ${k} | ${fmt(a)} | ${fmt(b)} |`
 
@@ -464,6 +547,18 @@ const report = `# 初回メッセージ生成 評価レポート
 ※ 拡張本体の既定モデルも gemini-3.5-flash。この評価は既定設定のユーザーの挙動を測ったもの。
 
 ${legacy.inconclusive ? "⚠️ 旧プロンプトは評価件数0件のため判定不能（INCONCLUSIVE）です。\n" : ""}${fresh.inconclusive ? "⚠️ 新プロンプトは評価件数0件のため判定不能（INCONCLUSIVE）です。\n" : ""}
+## 対比較（主指標）
+
+同じ相手への2通を並べて「どちらに返信するか」を選ばせた結果。提示順はランダム化している。
+
+- **新プロンプトが選ばれた割合: ${newWinRate === null ? "N/A" : `${(newWinRate * 100).toFixed(0)}% （${newWins}/${pairwiseValid.length}件）`}**
+- 判定失敗: ${pairwise.length - pairwiseValid.length} / ${pairwise.length} 件
+- 先に提示された方が選ばれた割合: ${firstPositionRate === null ? "N/A" : `${(firstPositionRate * 100).toFixed(0)}%`}（50%から大きくずれていたら位置バイアスを疑う）
+
+50%が「差なし」。件数が少ないと偶然でずれるので、40件なら概ね ±15pt 程度は誤差とみなすこと。
+
+## 個別指標
+
 | 指標 | 旧プロンプト | 新プロンプト |
 |---|---|---|
 ${row("評価件数", legacy.n, fresh.n)}
@@ -475,7 +570,7 @@ ${row("禁止表現あり", legacy.bannedHits, fresh.bannedHits)}
 ${row("NG言及あり", legacy.ngMentions, fresh.ngMentions)}
 ${row("固有度（参考）", legacy.avgSpecificity, fresh.avgSpecificity)}
 ${row("審査JSONパース失敗（返信/読まれた感）", legacy.judgeParseFailures, fresh.judgeParseFailures)}
-${row("返信する と判定された割合", legacy.replyRate, fresh.replyRate)}
+${row("返信する と判定された割合（天井に張り付くため参考）", legacy.replyRate, fresh.replyRate)}
 ${row("連絡先交換まで行くと判定された割合", legacy.contactExchangeRate, fresh.contactExchangeRate)}
 ${row("読まれた感 平均（パース失敗除く）", legacy.avgFeltRead, fresh.avgFeltRead)}
 ${row("審査JSONパース失敗（汎用性）", legacy.genericityJudgeParseFailures, fresh.genericityJudgeParseFailures)}
@@ -488,7 +583,8 @@ INCONCLUSIVE（判定不能）と表示する。INCONCLUSIVE を PASS として�
 
 - 素材外話題 0件 → ${offTopicVerdict}
 - 汎用性 20%以下 → ${genericityVerdict}
-- ${diffVerdict("返信する割合", legacy.replyRate, fresh.replyRate)}
+- 対比較で新プロンプトが選ばれた割合: ${newWinRate === null ? "INCONCLUSIVE" : `${(newWinRate * 100).toFixed(0)}%`}（50%が差なし）
+- ${diffVerdict("返信する割合（参考）", legacy.replyRate, fresh.replyRate)}
 - ${diffVerdict("連絡先交換まで行く割合", legacy.contactExchangeRate, fresh.contactExchangeRate)}
   （この2つは絶対値の閾値を置かず、旧プロンプトとの差で見る。
    n が小さいとノイズに埋もれるので、40件未満の測定では差を解釈しないこと）
