@@ -5,25 +5,69 @@
  * プロフィール補足テキストとアプローチ戦略ヒントを生成する。
  */
 
-// my_type コード → 象限分類
-// line.png の2軸チャート（縦: サド↔マゾ、横: サブ↔ドミ）と
-// app.js のグリッド座標から特定
+// my_type / conditions_type のコード体系
+//
+// 2026-08-02、実サイトのフロントエンドバンドルから確定した定義:
+//   group "S": S(=S型全体), A,B,C,D,E,F,G,H,I, U
+//   group "M": M(=M型全体), J,K,L,N,O,P,Q,R,T, V
+//   象限セレクタ: U="サド × サブ", S="サド × ドミ", M="マゾ × サブ", V="マゾ × ドミ"
+//
+// `S` と `M` は個別のセルではなく「S型全体 / M型全体」を表す集約値。
+// 検索の絞り込みや conditions_type で「S型なら誰でも」の意味で使われる。
+const TYPE_GROUPS: Record<"S" | "M", string[]> = {
+  S: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "U"],
+  M: ["J", "K", "L", "N", "O", "P", "Q", "R", "T", "V"]
+}
+
+/** コード → 所属グループ（S型 / M型） */
+export const TYPE_GROUP: Record<string, "S" | "M"> = (() => {
+  const out: Record<string, "S" | "M"> = {}
+  for (const g of ["S", "M"] as const) for (const c of TYPE_GROUPS[g]) out[c] = g
+  return out
+})()
+
+/**
+ * タイプ選択（"M,Q,T" 形式）を具体的なセルコードの集合に展開する。
+ * `S` / `M` の集約値はグループ全体に展開する。
+ */
+export function expandTypeCodes(value: unknown): Set<string> {
+  const out = new Set<string>()
+  if (value === undefined || value === null) return out
+  const codes = String(value).split(",").map((c) => c.trim().toUpperCase()).filter(Boolean)
+  for (const code of codes) {
+    if (code === "S" || code === "M") {
+      for (const c of TYPE_GROUPS[code]) out.add(c)
+    } else if (TYPE_GROUP[code]) {
+      out.add(code)
+    }
+  }
+  return out
+}
+
+// コード → 象限分類
 const QUADRANT_MAP: Record<string, string> = {
-  // ドミ×サド象限 (右上)
+  // サド × ドミ（右上）
   A: "dom-sadist", B: "dom-sadist", C: "dom-sadist",
   D: "dom-sadist", E: "dom-sadist", F: "dom-sadist",
   G: "dom-sadist", H: "dom-sadist", I: "dom-sadist",
-  // サブ×マゾ象限 (左下)
+  // S は「S型全体」。象限セレクタでは "サド × ドミ" に割り当てられている
+  S: "dom-sadist",
+  // サド × サブ。U は S群に属するので、従来の "switch" は誤りだった
+  U: "sub-sadist",
+  // マゾ × サブ（左下）。M は「M型全体」で、象限セレクタでは "マゾ × サブ"
   J: "sub-masochist", K: "sub-masochist", L: "sub-masochist",
   N: "sub-masochist", O: "sub-masochist", P: "sub-masochist",
-  // ドミ×マゾ象限 (右下)
-  Q: "dom-masochist", R: "dom-masochist", S: "dom-masochist", T: "dom-masochist",
-  // スイッチャー (中央)
-  U: "switch", V: "switch",
+  M: "sub-masochist",
+  // マゾ × ドミ（右下）
+  Q: "dom-masochist", R: "dom-masochist", T: "dom-masochist",
+  // V は象限セレクタでは "マゾ × ドミ" だが、別のセレクタでは "スイッチャー" と
+  // ラベルされており解釈が割れる。従来どおり switch のままにしてある。
+  V: "switch",
 }
 
 const QUADRANT_LABELS: Record<string, string> = {
   "dom-sadist": "支配的・加虐的",
+  "sub-sadist": "加虐的・従属的",
   "sub-masochist": "従順・被虐的",
   "dom-masochist": "支配的・被虐的",
   "switch": "スイッチャー",

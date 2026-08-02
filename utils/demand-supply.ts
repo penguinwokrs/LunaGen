@@ -9,7 +9,7 @@
  *
  * 出力は実務的・具体的なトーン。ロマンチックな決め台詞は使わない。
  */
-import { analyzeKinkType } from "./kink-analysis"
+import { analyzeKinkType, expandTypeCodes } from "./kink-analysis"
 
 export type Axis = "目的" | "役割" | "生活条件" | "嗜好"
 export type Direction = "相手→自分" | "自分→相手" | "相互"
@@ -159,14 +159,41 @@ export function computeDemandSupply(
     })
   }
 
+  // --- タイプの需給（相手が明示的に選んだ「求めるタイプ」× 自分のタイプ） ---
+  // 象限からの推定より優先度が高い。相手が自分で選んだ需要そのものなので、
+  // 「相手が求めるもの × 自分が出せるもの」という設計の中核にあたる。
+  const myTypes = expandTypeCodes(myData.my_type)
+  const tTypes = expandTypeCodes(targetData.my_type)
+  const myWantTypes = expandTypeCodes(myData.conditions_type)
+  const tWantTypes = expandTypeCodes(targetData.conditions_type)
+  const meInTheirWants = [...myTypes].some((c) => tWantTypes.has(c))
+  const themInMyWants = [...tTypes].some((c) => myWantTypes.has(c))
+  const explicitTypeMatch = meInTheirWants || themInMyWants
+  pushBidirectional(matches, {
+    axis: "役割",
+    baseStrength: 4,
+    satisfiedToMe: meInTheirWants,
+    satisfiedToYou: themInMyWants,
+    labelMutual: "お互いが求めるタイプに合致（相手が選んだ「求めるタイプ」と一致）",
+    labelToMe: "自分が相手の求めるタイプに合致（相手が選んだ「求めるタイプ」と一致）",
+    labelToYou: "相手が自分の求めるタイプに合致",
+    // 方向（相手→自分 / 自分→相手 / 相互）のどれでも成り立つ書き方にする。
+    // pushBidirectional は3方向で同じ talkingPoint を使うため。
+    talkingPoint:
+      "タイプの希望が噛み合っている。条件が合うとは書かず、同じ方向を見ている前提で書く。"
+  })
+
   // --- 役割（S/M象限の相補・同型 = 相互） ---
+  // 上のタイプ需給が成立した場合は同じことを二度言うことになるので出さない。
   const myKink = analyzeKinkType(myData)
   const tKink = analyzeKinkType(targetData)
   const myDom = myKink.quadrants.includes("dom-sadist") || myKink.quadrants.includes("dom-masochist")
   const mySub = myKink.quadrants.includes("sub-masochist")
   const tDom = tKink.quadrants.includes("dom-sadist") || tKink.quadrants.includes("dom-masochist")
   const tSub = tKink.quadrants.includes("sub-masochist")
-  if ((myDom && tSub) || (mySub && tDom)) {
+  if (explicitTypeMatch) {
+    // タイプ需給で既に役割の噛み合いを出しているので何もしない
+  } else if ((myDom && tSub) || (mySub && tDom)) {
     matches.push({
       axis: "役割",
       direction: "相互",
