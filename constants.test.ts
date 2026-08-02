@@ -5,7 +5,8 @@ import {
   DEFAULT_PROMPT,
   FOCUS_TOPIC_INSTRUCTION,
   LEGACY_CONTINUOUS_PROMPT_V1,
-  LEGACY_DEFAULT_PROMPT_V1
+  LEGACY_DEFAULT_PROMPT_V1,
+  LEGACY_DEFAULT_PROMPT_V2
 } from "./constants"
 
 // プロンプトが具体トピックを名指しすると、LLMは素材が無くてもその話題へ逃げる。
@@ -82,6 +83,40 @@ describe("FOCUS_TOPIC_INSTRUCTION", () => {
   })
 })
 
+describe("DEFAULT_PROMPT: 研究知見にもとづく要素", () => {
+  // Huang et al. (2017, JPSP) — フォローアップ質問が second date を増やす。
+  // 機序は responsiveness（聞いている・理解していると伝わること）の知覚。
+  it("問いが相手の言葉を受けた形であることを求める", () => {
+    expect(DEFAULT_PROMPT).toContain("相手が書いた言葉を受けたことが伝わる形にする")
+  })
+
+  // Khan & Chaudhry (2015) は genuine compliments を有効要素に挙げるが、
+  // Bruch & Newman (2018) は男性が肯定語を増やすと返信率が下がると報告している。
+  // 称賛は1点だけ・検証可能な具体に限る、という形で両立させている。
+  it("具体的な称賛を1つだけ許し、一般的な賛辞は禁じる", () => {
+    expect(DEFAULT_PROMPT).toContain("検証可能な具体1点に限る")
+    expect(DEFAULT_PROMPT).toContain("称賛や肯定的な言葉を重ねること")
+  })
+
+  // Khan & Chaudhry (2015) — avoidance of criticism
+  it("相手の選択や書き方への批判・訂正を禁じる", () => {
+    expect(DEFAULT_PROMPT).toContain("相手の選択・考え方・書き方を評価したり訂正したりすること")
+  })
+
+  // Ante (2026) — persona-to-person gap。整いすぎた文面は本人と一致せず初対面が気まずくなる。
+  // 目標は「うまい文章」ではなく「本人が書けたはずの文章」。
+  it("本人が書けたはずの範囲に収めることを求める", () => {
+    expect(DEFAULT_PROMPT).toContain("自分のプロフィールの書きぶりに合わせる")
+    expect(DEFAULT_PROMPT).toContain("文章の巧拙は目標にしない")
+  })
+
+  // Irrational Labs (2024) のフィールド実験でユーモアが約12%効く。
+  // ただし相手をいじる笑いは avoidance of criticism と衝突するので対象を自分に限る。
+  it("ユーモアは自分に向けたものに限る", () => {
+    expect(DEFAULT_PROMPT).toContain("笑いの対象は自分に限る")
+  })
+})
+
 describe("LEGACY プロンプト定数", () => {
   it("旧デフォルトは新デフォルトと異なる", () => {
     expect(LEGACY_DEFAULT_PROMPT_V1).not.toBe(DEFAULT_PROMPT)
@@ -89,6 +124,14 @@ describe("LEGACY プロンプト定数", () => {
 
   it("旧デフォルトは食に関する行を持つ（移行判定の対象そのもの）", () => {
     expect(LEGACY_DEFAULT_PROMPT_V1).toContain("食事・飲みの誘いは禁止")
+  })
+
+  it("V2は現行のDEFAULT_PROMPTと異なる（V2は変更前のスナップショット）", () => {
+    expect(LEGACY_DEFAULT_PROMPT_V2).not.toBe(DEFAULT_PROMPT)
+  })
+
+  it("V2はV1とも異なる（別世代のスナップショット）", () => {
+    expect(LEGACY_DEFAULT_PROMPT_V2).not.toBe(LEGACY_DEFAULT_PROMPT_V1)
   })
 
   it("旧継続プロンプトは新継続プロンプトと異なる", () => {

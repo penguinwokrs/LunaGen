@@ -2,7 +2,7 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, DEFAULT_TONE_PRESETS } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V2, DEFAULT_TONE_PRESETS } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
 import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
@@ -436,15 +436,19 @@ async function generateWithOllama(prompt: string, model: string, baseURL: string
  * ユーザーが編集済みなら何もしない（migratePrompt が null を返す）。
  */
 chrome.runtime.onInstalled.addListener(async () => {
-  const targets: { key: string; legacy: string; next: string }[] = [
-    { key: "promptTemplate", legacy: LEGACY_DEFAULT_PROMPT_V1, next: DEFAULT_PROMPT },
-    { key: "continuousPromptTemplate", legacy: LEGACY_CONTINUOUS_PROMPT_V1, next: CONTINUOUS_CONVERSATION_PROMPT }
+  const targets: { key: string; legacies: string[]; next: string }[] = [
+    {
+      key: "promptTemplate",
+      legacies: [LEGACY_DEFAULT_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V2],
+      next: DEFAULT_PROMPT
+    },
+    { key: "continuousPromptTemplate", legacies: [LEGACY_CONTINUOUS_PROMPT_V1], next: CONTINUOUS_CONVERSATION_PROMPT }
   ]
 
-  for (const { key, legacy, next } of targets) {
+  for (const { key, legacies, next } of targets) {
     try {
       const stored = await storage.get<string>(key)
-      const migrated = migratePrompt(stored, legacy, next)
+      const migrated = migratePrompt(stored, legacies, next)
       if (migrated !== null) {
         await storage.set(key, migrated)
         await logBG("info", `Prompt migrated to new default: ${key}`)

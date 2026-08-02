@@ -18,16 +18,21 @@
  * Plasmo の Storage.get は JSON パース失敗時も undefined を返すため、
  * 「読めなかった」と「未設定」を区別できない。書き込まないことでその穴も塞ぐ。
  *
+ * デフォルトは複数世代ありうる（V1, V2, …）。過去のどの版と一致しても移行する。
+ * 直前の1世代しか見ないと、1つ前の版を保存済みのユーザーが「編集済み」と誤判定されて
+ * 恒久的に取り残される。DEFAULT_PROMPT を更新するときは、必ず直前の文面を
+ * LEGACY_..._V{n} として保存し、この配列に足すこと。
+ *
  * @param stored 現在 storage に入っている値
- * @param legacy 直前のデフォルト（完全一致で「未編集」と判定する）
+ * @param legacies 過去のデフォルト（完全一致で「未編集」と判定する）
  * @param next 新しいデフォルト
  */
 export function migratePrompt(
   stored: string | undefined | null,
-  legacy: string,
+  legacies: string[],
   next: string
 ): string | null {
   if (stored === undefined || stored === null || stored === "") return null
-  if (stored === legacy) return next
+  if (legacies.includes(stored)) return next
   return null
 }
