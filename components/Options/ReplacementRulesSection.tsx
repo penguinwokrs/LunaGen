@@ -1,5 +1,6 @@
 import React from "react"
 import { Section } from "../Common/Section"
+import { ImeSafeField } from "../Common/ImeSafeField"
 import { replacementRules as defaultRules } from "../../assets/replacement_rules"
 
 export type ReplacementRule = { from: string; to: string }
@@ -75,10 +76,9 @@ export const ReplacementRulesSection = ({ enabled, setEnabled, rules, setRules }
                     <div style={{ maxHeight: "400px", overflowY: "auto", marginBottom: "12px" }}>
                         {rules.map((rule, index) => (
                             <div key={index} style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
-                                <input
-                                    type="text"
+                                <ImeSafeField
                                     value={rule.from}
-                                    onChange={(e) => handleChange(index, "from", e.target.value)}
+                                    onChange={(v) => handleChange(index, "from", v)}
                                     placeholder="対象ワード"
                                     style={{
                                         flex: 1, padding: "8px", borderRadius: "4px",
@@ -86,10 +86,9 @@ export const ReplacementRulesSection = ({ enabled, setEnabled, rules, setRules }
                                     }}
                                 />
                                 <span style={{ color: "#999", fontSize: "0.9rem" }}>/</span>
-                                <input
-                                    type="text"
+                                <ImeSafeField
                                     value={rule.to}
-                                    onChange={(e) => handleChange(index, "to", e.target.value)}
+                                    onChange={(v) => handleChange(index, "to", v)}
                                     placeholder="置き換えワード"
                                     style={{
                                         flex: 1, padding: "8px", borderRadius: "4px",

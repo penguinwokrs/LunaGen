@@ -1,10 +1,12 @@
 import React from "react"
 
+import { ImeSafeField } from "../Common/ImeSafeField"
+
 import { NO_TONE, type TonePreset } from "../../utils/tone"
 
 interface TonePresetSectionProps {
     presets: TonePreset[]
-    setPresets: (val: TonePreset[]) => void
+    setPresets: (val: TonePreset[] | ((prev: TonePreset[]) => TonePreset[])) => void
     defaultToneId: string
     setDefaultToneId: (val: string) => void
     onReset: () => void
@@ -18,8 +20,10 @@ export const TonePresetSection = ({
     onReset
 }: TonePresetSectionProps) => {
 
+    // 常に最新の値を基準に更新する。props を基準にすると、storage の読み込みが
+    // 着地する前に編集したとき、編集していない他の枠が既定値へ巻き戻る。
     const update = (id: string, patch: Partial<TonePreset>) => {
-        setPresets(presets.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+        setPresets((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)))
     }
 
     return (
@@ -46,15 +50,16 @@ export const TonePresetSection = ({
 
             {presets.map((preset, i) => (
                 <div key={preset.id} style={{ marginBottom: "12px", padding: "10px", border: "1px solid #eee", borderRadius: "4px" }}>
-                    <input
+                    <ImeSafeField
                         value={preset.label}
-                        onChange={(e) => update(preset.id, { label: e.target.value })}
+                        onChange={(v) => update(preset.id, { label: v })}
                         placeholder={`口調${i + 1}の名前`}
                         style={{ width: "200px", padding: "6px", marginBottom: "6px", boxSizing: "border-box" }}
                     />
-                    <textarea
+                    <ImeSafeField
+                        multiline
                         value={preset.instruction}
-                        onChange={(e) => update(preset.id, { instruction: e.target.value })}
+                        onChange={(v) => update(preset.id, { instruction: v })}
                         placeholder="口調の指示文（空にするとこの枠はメニューに出ません）"
                         rows={3}
                         style={{ width: "100%", padding: "8px", boxSizing: "border-box", fontFamily: "monospace", lineHeight: 1.4 }}
