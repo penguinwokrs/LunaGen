@@ -74,8 +74,9 @@ const TARGET_TOTAL = Number(process.env.CORPUS_TARGET || 50)
  * 収集したカードは `_cards` / `_commonCards` として匿名化レコードに付ける。
  */
 const WITH_CARDS = process.env.WITH_CARDS === "1"
-const MAX_OWN_CARD_PAGES = 3
-const MAX_COMMON_CARD_PAGES = 10
+// 本番（logic/content-logic.ts）と揃える。評価が本番と違う枚数を見ては意味がない
+const MAX_OWN_CARD_PAGES = 1
+const MAX_COMMON_CARD_PAGES = 1
 
 /** 新規ユーザーがこの件数増えるごとに自動保存する */
 const AUTOSAVE_EVERY_N = 5
