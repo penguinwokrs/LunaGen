@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react"
 import { Storage } from "@plasmohq/storage"
-import { getMyProfile, insertText, getPartnerProfile, resolvePartnerUserId } from "../../logic/content-logic"
+import { getMyProfile, insertText, getPartnerProfile, getPartnerCards, resolvePartnerUserId } from "../../logic/content-logic"
 import { addLog } from "../../utils/logger"
 import { extractProfileFromJSON } from "../../utils/profile"
 import { extractLookups, generateDemandSupplyHint } from "../../utils/demand-supply"
+import { formatCardsSection } from "../../utils/cards"
 import { formatChatHistory, resolveCachedHistory, resolveCachedPartner } from "../../utils/partner"
 import { getThreadIdFromUrl, getUserIdFromUrl } from "../../utils/url"
 import { isPremiumInput } from "../../utils/premium"
@@ -96,13 +97,24 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
 
             const targetName = targetData?.name || targetData?.nickname || ""
 
+            // 好みのカード（選択式で登録された具体的な好み）を取得する。
+            // common は自分との共通カードだけをサーバーが返すので、そのまま需給マッチに使える。
+            const partnerId = targetData?.id ?? targetData?.user_id
+            let cards = { own: [] as string[], common: [] as string[] }
+            if (partnerId !== undefined && partnerId !== null) {
+                cards = await getPartnerCards(String(partnerId))
+            }
+            // 相手のカードはプロフィール本文の一部として渡す（【…】形式なので
+            // プロンプトの「素材の範囲」ルールがそのまま働く）
+            targetProfileText += formatCardsSection(cards.own)
+
             // 自分と相手のraw dataから双方向の需給マッチを生成
             let demandSupplyHint = ""
             const myRawJson = await storage.get("myProfileRaw")
             if (myRawJson && targetData) {
                 try {
                     const myRawData = JSON.parse(myRawJson as string)
-                    demandSupplyHint = generateDemandSupplyHint(myRawData, targetData, extractLookups(targetRaw))
+                    demandSupplyHint = generateDemandSupplyHint(myRawData, targetData, extractLookups(targetRaw), cards.common)
                 } catch (e) {
                     await addLog("warn", "Failed to parse myProfileRaw for demand-supply", null, "CONTENT")
                 }

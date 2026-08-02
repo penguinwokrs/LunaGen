@@ -1,5 +1,6 @@
 import { Storage } from "@plasmohq/storage"
 import { addLog } from "../utils/logger"
+import { collectCardNames, parseCardPage } from "../utils/cards"
 import { extractProfileFromJSON } from "../utils/profile"
 
 const storage = new Storage({ area: "local" })
@@ -160,5 +161,52 @@ export async function getPartnerProfile(
     } catch (e: any) {
         await addLog("error", "Failed to fetch partner profile", { error: e.toString(), userId }, "CONTENT")
         return null
+    }
+}
+
+
+/** 好みのカードの取得結果 */
+export interface PartnerCards {
+    /** 相手が選んだカード（上限あり） */
+    own: string[]
+    /** 自分と共通のカード。サーバー側が計算したもの */
+    common: string[]
+}
+
+/** 相手固有のカードを辿る上限ページ数（1ページ8枚）。24枚まで */
+const MAX_OWN_CARD_PAGES = 3
+/** 共通カードはそのまま需給マッチの主役になるので取りこぼさない */
+const MAX_COMMON_CARD_PAGES = 10
+
+/**
+ * 相手の「好みのカード」を取得する。
+ *
+ * 2つのエンドポイントがあり、common は自分との共通カードだけを返す
+ * （サーバーが計算済みの共通点なので、需給マッチにそのまま使える）。
+ * 失敗しても生成は続けたいので、例外は投げず空配列を返す。
+ */
+export async function getPartnerCards(userId: string): Promise<PartnerCards> {
+    const fetchFrom = (kind: "your" | "common") => async (page: number) => {
+        try {
+            const res = await fetch(
+                `https://luna-matching.com/api/user/${kind}/card/get/${userId}?page=${page}`
+            )
+            if (!res.ok) return null
+            return parseCardPage(await res.json())
+        } catch {
+            return null
+        }
+    }
+
+    try {
+        const [own, common] = await Promise.all([
+            collectCardNames(fetchFrom("your"), MAX_OWN_CARD_PAGES),
+            collectCardNames(fetchFrom("common"), MAX_COMMON_CARD_PAGES)
+        ])
+        await addLog("info", `Partner cards: own=${own.length} common=${common.length}`, null, "CONTENT")
+        return { own, common }
+    } catch (e) {
+        await addLog("warn", "Failed to fetch partner cards", { error: String(e) }, "CONTENT")
+        return { own: [], common: [] }
     }
 }

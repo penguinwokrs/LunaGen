@@ -137,10 +137,28 @@ function ageInRange(person: any, age: number | null): boolean {
 export function computeDemandSupply(
   myData: any,
   targetData: any,
-  lookups: Lookups = {}
+  lookups: Lookups = {},
+  commonCards: string[] = []
 ): DemandSupplyResult {
   const matches: DemandMatch[] = []
   const avoid: string[] = []
+
+  // --- 好みのカードの共通（サーバーが計算済みの共通点） ---
+  // 双方が選択式で自分で選んだ項目なので、推定を挟まない最も具体的な共通点。
+  // 「猫が好き」「ボンデージ&拘束具」のように、そのまま話題にできる語で来る。
+  if (commonCards.length > 0) {
+    matches.push({
+      axis: "嗜好",
+      direction: "相互",
+      strength: 6,
+      label: `好みのカードが共通（${commonCards.join("・")}）`,
+      talkingPoint:
+        "お互いが自分で選んだ共通の好み。相手が選んだ言葉をそのまま使ってよい。推定ではないので主役にしやすい。"
+    })
+  }
+
+  // 共通カードは myData が無くても成立する（サーバーが計算済みのため）。
+  // 自分のプロフィールを未保存のユーザーでも、この最も強い共通点は使えるようにする。
   if (!myData || !targetData) return { matches, avoid }
 
   // --- 関係目的（双方が求める関係の重なり = 相互） ---
@@ -361,8 +379,13 @@ export function formatDemandSupplyHint(result: DemandSupplyResult): string {
  * プロンプトに注入する需給マッチ分析テキストを生成する。
  * 噛み合う点が無ければ空文字を返す。
  */
-export function generateDemandSupplyHint(myData: any, targetData: any, lookups: Lookups = {}): string {
-  return formatDemandSupplyHint(computeDemandSupply(myData, targetData, lookups))
+export function generateDemandSupplyHint(
+  myData: any,
+  targetData: any,
+  lookups: Lookups = {},
+  commonCards: string[] = []
+): string {
+  return formatDemandSupplyHint(computeDemandSupply(myData, targetData, lookups, commonCards))
 }
 
 /** API レスポンス全体から `*_list` ルックアップ表を抽出する */

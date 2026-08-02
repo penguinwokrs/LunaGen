@@ -302,3 +302,36 @@ describe("computeDemandSupply: タイプの需給（conditions_type）", () => {
     expect(role?.label).toContain("相補的")
   })
 })
+
+describe("computeDemandSupply: 好みのカードの共通", () => {
+  it("共通カードがあれば最上位の噛み合いとして出る", () => {
+    const { matches } = computeDemandSupply({ age: 30 }, { age: 28 }, {}, ["猫が好き", "映画好き"])
+    const card = matches.find((m) => m.label.includes("好みのカード"))
+    expect(card).toBeTruthy()
+    expect(card!.axis).toBe("嗜好")
+    expect(card!.label).toContain("猫が好き・映画好き")
+    // 他のどのマッチより強い（推定ではなく本人の選択なので）
+    expect(Math.max(...matches.map((m) => m.strength))).toBe(card!.strength)
+  })
+
+  it("自分のプロフィールが無くても共通カードは出る", () => {
+    const { matches } = computeDemandSupply(null, { age: 28 }, {}, ["首輪が好き"])
+    expect(matches.find((m) => m.label.includes("好みのカード"))).toBeTruthy()
+  })
+
+  it("共通カードが無ければ何も足さない", () => {
+    const { matches } = computeDemandSupply({ age: 30 }, { age: 28 }, {}, [])
+    expect(matches.find((m) => m.label.includes("好みのカード"))).toBeUndefined()
+  })
+
+  it("話題ブロックの先頭に来る", () => {
+    const hint = generateDemandSupplyHint(
+      { my_type: "E", age: 33, conditions_age_from: 20, conditions_age_to: 40 },
+      { my_type: "K", age: 30, conditions_age_from: 20, conditions_age_to: 40 },
+      {},
+      ["猫が好き"]
+    )
+    const lines = hint.split("\n").filter((l) => l.startsWith("- "))
+    expect(lines[0]).toContain("好みのカード")
+  })
+})
