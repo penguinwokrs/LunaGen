@@ -75,7 +75,7 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
         const ollamaUrl = baseURL || `http://${OLLAMA_DEFAULT_HOST}:${OLLAMA_DEFAULT_PORT}`
         const ollama = createOpenAI({ baseURL: `${ollamaUrl}/v1`, apiKey: "ollama" })
         const { text } = await generateText({
-          model: ollama(model || OLLAMA_DEFAULT_MODEL),
+          model: ollama.chat(model || OLLAMA_DEFAULT_MODEL),
           prompt: testPrompt,
         })
         return { success: true, text: text || "" }
@@ -93,7 +93,7 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
         // baseURL は呼び出し側がアカウントIDから組み立てて渡す
         const cf = createOpenAI({ baseURL, apiKey })
         const { text } = await generateText({
-          model: cf(model || CLOUDFLARE_DEFAULT_MODEL),
+          model: cf.chat(model || CLOUDFLARE_DEFAULT_MODEL),
           prompt: testPrompt,
         })
         return { success: true, text: text || "" }
@@ -428,13 +428,18 @@ async function generateWithOpenAI(prompt: string, model: string, maxOutputTokens
  * OpenAI互換エンドポイントを使うので Ollama と同じ createOpenAI で足りる。
  * 認証はアカウントIDでURLが決まり、トークンを Bearer で送る形。
  */
+// AI SDK v6 の @ai-sdk/openai は既定で Responses API（body に input）を送る。
+  // OpenAI互換をうたう他サービス（Cloudflare Workers AI / Ollama）は
+  // Chat Completions しか受け付けないため、.chat() を明示して形式を固定する。
+  // 2026-08-03 実測: 明示しないと Cloudflare が
+  // "required properties at '/' are 'messages'" で 400 を返す。
 async function generateWithCloudflare(prompt: string, model: string, accountId: string) {
   const apiKey = await syncStorage.get("cloudflareApiToken")
   if (!apiKey) throw new Error("Cloudflare API Token is not set")
   if (!accountId) throw new Error("Cloudflare Account ID is not set")
 
   const cf = createOpenAI({ baseURL: cloudflareBaseURL(accountId), apiKey })
-  const { text, finishReason } = await generateText({ model: cf(model), prompt })
+  const { text, finishReason } = await generateText({ model: cf.chat(model), prompt })
   if (!text) {
     await logBG("error", "Cloudflare generated empty text", { finishReason })
     throw new Error(`Cloudflare generated no text. (FinishReason: ${finishReason})`)
@@ -447,7 +452,7 @@ async function generateWithOllama(prompt: string, model: string, baseURL: string
 
   try {
     const { text, finishReason } = await generateText({
-      model: ollama(model),
+      model: ollama.chat(model),
       prompt,
     })
 

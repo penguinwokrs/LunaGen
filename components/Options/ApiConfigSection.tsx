@@ -79,46 +79,31 @@ async function fetchOllamaModels(host: string, port: string): Promise<string[]> 
 }
 
 /**
- * Cloudflare Workers AI のモデル一覧を取得する。
+ * Cloudflare Workers AI のテキスト生成モデル一覧を取得する。
  *
- * 2つの経路を順に試す。どちらの形で返るかがドキュメントから確定できなかったため、
- * 取れた方を使い、両方だめなら呼び出し側で既定リストのまま据え置く。
- *   1. /ai/models/search … Workers AI のモデル検索（{ result: [{ name, task }] }）
- *   2. /ai/v1/models     … OpenAI互換の一覧（{ data: [{ id }] }）
+ * 2026-08-03 に実アカウントで確認した結果:
+ *   ○ GET /ai/models/search?task=Text Generation … 26件取得できた（{ result: [{ name }] }）
+ *   × GET /ai/v1/models … 7001 "GET not supported for requested URI."
+ * OpenAI互換なのは /chat/completions だけで、モデル一覧は Cloudflare 固有の経路を使う。
  */
 async function fetchCloudflareModels(accountId: string, apiToken: string): Promise<string[]> {
-    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}`
-    const headers = { Authorization: `Bearer ${apiToken}` }
-
-    try {
-        const res = await fetch(
-            `${base}/ai/models/search?task=Text%20Generation&per_page=100`,
-            { headers }
-        )
-        if (res.ok) {
-            const data = await res.json()
-            const names = (data?.result || [])
-                .map((m: any) => m?.name)
-                .filter((n: any) => typeof n === "string" && n.startsWith("@cf/"))
-            if (names.length > 0) return [...new Set<string>(names)].sort()
-        }
-    } catch {
-        // 次の経路を試す
-    }
-
-    const res = await fetch(`${base}/ai/v1/models`, { headers })
+    const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}/ai/models/search?task=Text%20Generation&per_page=100`,
+        { headers: { Authorization: `Bearer ${apiToken}` } }
+    )
     if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(
-            err?.errors?.[0]?.message || err?.error?.message || `API Error (${res.status})`
-        )
+        throw new Error(err?.errors?.[0]?.message || `API Error (${res.status})`)
     }
     const data = await res.json()
-    const ids = (data?.data || [])
-        .map((m: any) => m?.id)
-        .filter((id: any) => typeof id === "string")
-    if (ids.length === 0) throw new Error("モデル一覧が空でした")
-    return [...new Set<string>(ids)].sort()
+    if (!data?.success) {
+        throw new Error(data?.errors?.[0]?.message || "モデル一覧を取得できませんでした")
+    }
+    const names = (data.result || [])
+        .map((m: any) => m?.name)
+        .filter((n: any) => typeof n === "string" && n.startsWith("@cf/"))
+    if (names.length === 0) throw new Error("テキスト生成モデルが見つかりませんでした")
+    return [...new Set<string>(names)].sort()
 }
 
 const ActiveBadge = () => (
