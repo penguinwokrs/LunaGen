@@ -2,7 +2,7 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V2, DEFAULT_TONE_PRESETS } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, CLOUDFLARE_DEFAULT_MODEL, cloudflareBaseURL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V2, DEFAULT_TONE_PRESETS } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
 import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
@@ -89,6 +89,15 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
         })
         return { success: true, text: text || "" }
       }
+      case "cloudflare": {
+        // baseURL は呼び出し側がアカウントIDから組み立てて渡す
+        const cf = createOpenAI({ baseURL, apiKey })
+        const { text } = await generateText({
+          model: cf(model || CLOUDFLARE_DEFAULT_MODEL),
+          prompt: testPrompt,
+        })
+        return { success: true, text: text || "" }
+      }
       default:
         throw new Error(`Unknown provider: ${provider}`)
     }
@@ -117,6 +126,11 @@ async function generateWithConfiguredProvider(
     case "openai": {
       const model = await storage.get("openaiModel") || "gpt-4o"
       return await generateWithOpenAI(prompt, model, opts.openaiMaxTokens ?? 500)
+    }
+    case "cloudflare": {
+      const model = await storage.get("cloudflareModel") || CLOUDFLARE_DEFAULT_MODEL
+      const accountId = await storage.get<string>("cloudflareAccountId")
+      return await generateWithCloudflare(prompt, model, accountId || "")
     }
     default:
       throw new Error(`Unknown AI provider: ${aiProvider}`)
@@ -406,6 +420,26 @@ async function generateWithOpenAI(prompt: string, model: string, maxOutputTokens
     await logBG("error", `OpenAI call failed: ${described.message}`, described.detail)
     throw new Error(described.message)
   }
+}
+
+/**
+ * Cloudflare Workers AI で生成する。
+ *
+ * OpenAI互換エンドポイントを使うので Ollama と同じ createOpenAI で足りる。
+ * 認証はアカウントIDでURLが決まり、トークンを Bearer で送る形。
+ */
+async function generateWithCloudflare(prompt: string, model: string, accountId: string) {
+  const apiKey = await syncStorage.get("cloudflareApiToken")
+  if (!apiKey) throw new Error("Cloudflare API Token is not set")
+  if (!accountId) throw new Error("Cloudflare Account ID is not set")
+
+  const cf = createOpenAI({ baseURL: cloudflareBaseURL(accountId), apiKey })
+  const { text, finishReason } = await generateText({ model: cf(model), prompt })
+  if (!text) {
+    await logBG("error", "Cloudflare generated empty text", { finishReason })
+    throw new Error(`Cloudflare generated no text. (FinishReason: ${finishReason})`)
+  }
+  return { text }
 }
 
 async function generateWithOllama(prompt: string, model: string, baseURL: string) {

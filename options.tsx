@@ -9,7 +9,7 @@ import { PromptTemplateSection } from "./components/Options/PromptTemplateSectio
 import { ReplacementRulesSection, type ReplacementRule } from "./components/Options/ReplacementRulesSection"
 import { TonePresetSection } from "./components/Options/TonePresetSection"
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, DEFAULT_TONE_PRESETS } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, DEFAULT_TONE_PRESETS, CLOUDFLARE_DEFAULT_MODEL } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
 import { NO_TONE, type TonePreset } from "./utils/tone"
 
@@ -31,6 +31,11 @@ export default function Options() {
   const [ollamaPort, setOllamaPort] = useStorage({ key: "ollamaPort", instance: storage }, OLLAMA_DEFAULT_PORT)
   const [ollamaModel, setOllamaModel] = useStorage({ key: "ollamaModel", instance: storage }, OLLAMA_DEFAULT_MODEL)
   const [ollamaModelList, setOllamaModelList] = useStorage<string[]>({ key: "ollamaModelList", instance: storage }, [])
+  // Cloudflare Workers AI。トークンは他プロバイダーのAPIキーと同じく sync に置く
+  const [cloudflareAccountId, setCloudflareAccountId] = useStorage({ key: "cloudflareAccountId", instance: storage }, "")
+  const [cloudflareApiToken, setCloudflareApiToken] = useStorage({ key: "cloudflareApiToken", instance: syncStorage }, "")
+  const [cloudflareModel, setCloudflareModel] = useStorage({ key: "cloudflareModel", instance: storage }, CLOUDFLARE_DEFAULT_MODEL)
+  const [cloudflareModelList, setCloudflareModelList] = useStorage<string[]>({ key: "cloudflareModelList", instance: storage }, [])
   const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
   const [continuousPromptTemplate, setContinuousPromptTemplate] = useStorage({ key: "continuousPromptTemplate", instance: storage }, CONTINUOUS_CONVERSATION_PROMPT)
   const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")
@@ -94,7 +99,34 @@ export default function Options() {
     }
   }
 
-  const runApiTest = async (provider: "gemini" | "openai" | "ollama", apiKey?: string) => {
+  const runApiTest = async (provider: "gemini" | "openai" | "ollama" | "cloudflare", apiKey?: string) => {
+    if (provider === "cloudflare") {
+      if (!cloudflareAccountId || !cloudflareApiToken) {
+        alert("アカウントIDとAPIトークンを入力して保存してください")
+        return
+      }
+      setTestResults(prev => ({ ...prev, cloudflare: { loading: true } }))
+      try {
+        const response: any = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({
+            action: "test_api",
+            provider: "cloudflare",
+            apiKey: cloudflareApiToken,
+            model: cloudflareModel,
+            baseURL: `https://api.cloudflare.com/client/v4/accounts/${cloudflareAccountId.trim()}/ai/v1`
+          }, resolve)
+        })
+        if (response.success) {
+          setTestResults(prev => ({ ...prev, cloudflare: { loading: false, result: response.text } }))
+        } else {
+          setTestResults(prev => ({ ...prev, cloudflare: { loading: false, error: response.error } }))
+        }
+      } catch (e: any) {
+        setTestResults(prev => ({ ...prev, cloudflare: { loading: false, error: e.message } }))
+      }
+      return
+    }
+
     if (provider === "ollama") {
       setTestResults(prev => ({ ...prev, ollama: { loading: true } }))
       try {
@@ -185,6 +217,14 @@ export default function Options() {
         setOllamaModel={setOllamaModel}
         ollamaModelList={ollamaModelList}
         setOllamaModelList={setOllamaModelList}
+        cloudflareAccountId={cloudflareAccountId}
+        setCloudflareAccountId={setCloudflareAccountId}
+        cloudflareApiToken={cloudflareApiToken}
+        setCloudflareApiToken={setCloudflareApiToken}
+        cloudflareModel={cloudflareModel}
+        setCloudflareModel={setCloudflareModel}
+        cloudflareModelList={cloudflareModelList}
+        setCloudflareModelList={setCloudflareModelList}
         testResults={testResults}
         onRunApiTest={runApiTest}
       />

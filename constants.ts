@@ -148,6 +148,29 @@ export const OPENAI_MODELS = [
     "gpt-3.5-turbo",
 ];
 
+// ===== Cloudflare Workers AI =====
+// OpenAI互換エンドポイントを使う（専用SDKは Workers 内の AI バインディング前提のため使わない）。
+//   POST https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions
+//   Authorization: Bearer {api_token}
+// 2026-08-03 に公式ドキュメントで確認。
+
+/** アカウントIDから OpenAI 互換の baseURL を組み立てる */
+export const cloudflareBaseURL = (accountId: string) =>
+    `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}/ai/v1`
+
+/**
+ * 既定のモデル候補。設定画面の「モデル一覧を更新」で実APIから取得して差し替えられる。
+ * ここに載せているのは公式ドキュメントで存在を確認できたものだけ。
+ * 推測でIDを足さないこと（存在しないIDを既定にすると初回利用で必ず失敗する）。
+ */
+export const CLOUDFLARE_MODELS = [
+    "@cf/zai-org/glm-4.7-flash",
+    "@cf/qwen/qwen3-30b-a3b-fp8",
+    "@cf/moonshotai/kimi-k2.6",
+];
+
+export const CLOUDFLARE_DEFAULT_MODEL = "@cf/zai-org/glm-4.7-flash";
+
 export const OLLAMA_DEFAULT_HOST = "localhost";
 export const OLLAMA_DEFAULT_PORT = "11434";
 export const OLLAMA_DEFAULT_MODEL = "jaahas/qwen3.5-uncensored:9b";

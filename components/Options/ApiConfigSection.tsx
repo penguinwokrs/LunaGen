@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react"
-import { GEMINI_MODELS, OPENAI_MODELS, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL } from "../../constants"
+import { GEMINI_MODELS, OPENAI_MODELS, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, CLOUDFLARE_MODELS } from "../../constants"
 
 interface ApiConfigSectionProps {
     aiProvider: string
@@ -25,7 +25,15 @@ interface ApiConfigSectionProps {
     ollamaModelList: string[]
     setOllamaModelList: (val: string[]) => void
     testResults: any
-    onRunApiTest: (provider: "gemini" | "openai" | "ollama", apiKey?: string) => void
+    cloudflareAccountId: string
+    setCloudflareAccountId: (val: string) => void
+    cloudflareApiToken: string
+    setCloudflareApiToken: (val: string) => void
+    cloudflareModel: string
+    setCloudflareModel: (val: string) => void
+    cloudflareModelList: string[]
+    setCloudflareModelList: (val: string[]) => void
+    onRunApiTest: (provider: "gemini" | "openai" | "ollama" | "cloudflare", apiKey?: string) => void
 }
 
 async function fetchGeminiModels(apiKey: string): Promise<string[]> {
@@ -68,6 +76,49 @@ async function fetchOllamaModels(host: string, port: string): Promise<string[]> 
     }
     const data = await res.json()
     return (data.data || []).map((m: any) => m.id).sort()
+}
+
+/**
+ * Cloudflare Workers AI のモデル一覧を取得する。
+ *
+ * 2つの経路を順に試す。どちらの形で返るかがドキュメントから確定できなかったため、
+ * 取れた方を使い、両方だめなら呼び出し側で既定リストのまま据え置く。
+ *   1. /ai/models/search … Workers AI のモデル検索（{ result: [{ name, task }] }）
+ *   2. /ai/v1/models     … OpenAI互換の一覧（{ data: [{ id }] }）
+ */
+async function fetchCloudflareModels(accountId: string, apiToken: string): Promise<string[]> {
+    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId.trim()}`
+    const headers = { Authorization: `Bearer ${apiToken}` }
+
+    try {
+        const res = await fetch(
+            `${base}/ai/models/search?task=Text%20Generation&per_page=100`,
+            { headers }
+        )
+        if (res.ok) {
+            const data = await res.json()
+            const names = (data?.result || [])
+                .map((m: any) => m?.name)
+                .filter((n: any) => typeof n === "string" && n.startsWith("@cf/"))
+            if (names.length > 0) return [...new Set<string>(names)].sort()
+        }
+    } catch {
+        // 次の経路を試す
+    }
+
+    const res = await fetch(`${base}/ai/v1/models`, { headers })
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(
+            err?.errors?.[0]?.message || err?.error?.message || `API Error (${res.status})`
+        )
+    }
+    const data = await res.json()
+    const ids = (data?.data || [])
+        .map((m: any) => m?.id)
+        .filter((id: any) => typeof id === "string")
+    if (ids.length === 0) throw new Error("モデル一覧が空でした")
+    return [...new Set<string>(ids)].sort()
 }
 
 const ActiveBadge = () => (
@@ -116,6 +167,14 @@ export const ApiConfigSection = ({
     setOllamaModel,
     ollamaModelList,
     setOllamaModelList,
+    cloudflareAccountId,
+    setCloudflareAccountId,
+    cloudflareApiToken,
+    setCloudflareApiToken,
+    cloudflareModel,
+    setCloudflareModel,
+    cloudflareModelList,
+    setCloudflareModelList,
     testResults,
     onRunApiTest
 }: ApiConfigSectionProps) => {
@@ -123,6 +182,8 @@ export const ApiConfigSection = ({
     const [openaiKeyInput, setOpenaiKeyInput] = useState(openaiApiKey)
     const [ollamaHostInput, setOllamaHostInput] = useState(ollamaHost || OLLAMA_DEFAULT_HOST)
     const [ollamaPortInput, setOllamaPortInput] = useState(ollamaPort || OLLAMA_DEFAULT_PORT)
+    const [cfAccountInput, setCfAccountInput] = useState(cloudflareAccountId)
+    const [cfTokenInput, setCfTokenInput] = useState(cloudflareApiToken)
     const [saveStatus, setSaveStatus] = useState<Record<string, { loading: boolean; error?: string; success?: boolean }>>({})
     const prevAiProvider = useRef(aiProvider)
 
@@ -159,6 +220,47 @@ export const ApiConfigSection = ({
         }
     }
 
+    const refreshCloudflareModels = async () => {
+        const id = cfAccountInput.trim()
+        const token = cfTokenInput.trim()
+        if (!id || !token) {
+            setSaveStatus(prev => ({ ...prev, cloudflare: { loading: false, error: "アカウントIDとAPIトークンを入力してください" } }))
+            return
+        }
+        setSaveStatus(prev => ({ ...prev, cloudflare: { loading: true } }))
+        try {
+            const models = await fetchCloudflareModels(id, token)
+            setCloudflareAccountId(id)
+            setCloudflareApiToken(token)
+            setCloudflareModelList(models)
+            if (!models.includes(cloudflareModel)) setCloudflareModel(models[0])
+            setSaveStatus(prev => ({ ...prev, cloudflare: { loading: false, success: true } }))
+            setTimeout(() => {
+                setSaveStatus(prev => {
+                    const c = prev["cloudflare"]
+                    if (c?.success) return { ...prev, cloudflare: { loading: false } }
+                    return prev
+                })
+            }, 3000)
+        } catch (e: any) {
+            setSaveStatus(prev => ({ ...prev, cloudflare: { loading: false, error: e.message } }))
+        }
+    }
+
+    /** 認証情報だけ保存する（モデル一覧が取れなくても既定リストで使えるようにする） */
+    const saveCloudflareCreds = () => {
+        setCloudflareAccountId(cfAccountInput.trim())
+        setCloudflareApiToken(cfTokenInput.trim())
+        setSaveStatus(prev => ({ ...prev, cloudflare: { loading: false, success: true } }))
+        setTimeout(() => {
+            setSaveStatus(prev => {
+                const c = prev["cloudflare"]
+                if (c?.success) return { ...prev, cloudflare: { loading: false } }
+                return prev
+            })
+        }, 3000)
+    }
+
     const refreshOllamaModels = async () => {
         const h = ollamaHostInput || OLLAMA_DEFAULT_HOST
         const p = ollamaPortInput || OLLAMA_DEFAULT_PORT
@@ -191,6 +293,8 @@ export const ApiConfigSection = ({
     useEffect(() => { setOpenaiKeyInput(openaiApiKey) }, [openaiApiKey])
     useEffect(() => { setOllamaHostInput(ollamaHost || OLLAMA_DEFAULT_HOST) }, [ollamaHost])
     useEffect(() => { setOllamaPortInput(ollamaPort || OLLAMA_DEFAULT_PORT) }, [ollamaPort])
+    useEffect(() => { setCfAccountInput(cloudflareAccountId) }, [cloudflareAccountId])
+    useEffect(() => { setCfTokenInput(cloudflareApiToken) }, [cloudflareApiToken])
 
     // ollama選択時に自動でモデル一覧を取得
     useEffect(() => {
@@ -203,6 +307,8 @@ export const ApiConfigSection = ({
     const geminiModels = geminiModelList?.length > 0 ? geminiModelList : GEMINI_MODELS
     const openaiModels = openaiModelList?.length > 0 ? openaiModelList : OPENAI_MODELS
     const ollamaModels = ollamaModelList?.length > 0 ? ollamaModelList : []
+    // 取得できていなければ既定リストを出す。空のセレクトにするより、まず動く候補を見せる
+    const cloudflareModels = cloudflareModelList?.length > 0 ? cloudflareModelList : CLOUDFLARE_MODELS
 
     return (
         <section style={{ marginBottom: "30px" }}>
@@ -496,6 +602,121 @@ export const ApiConfigSection = ({
                     {testResults["ollama"]?.result && (
                         <div style={{ marginTop: "12px", padding: "10px", backgroundColor: "#fff7e6", border: "1px solid #ffd591", borderRadius: "4px", color: "#ff6b00", fontSize: "0.85rem" }}>
                             ✨ 正常にレスポンスを受信しました: "{testResults["ollama"].result.slice(0, 30)}..."
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Cloudflare Workers AI Settings */}
+            <div style={{
+                marginBottom: "20px",
+                padding: "20px",
+                border: `2px solid ${aiProvider === "cloudflare" ? "#e91e63" : (testResults["cloudflare"]?.error ? "#ff4d4f" : "#ddd")}`,
+                borderRadius: "12px",
+                opacity: aiProvider === "cloudflare" ? 1 : 0.6,
+                backgroundColor: aiProvider === "cloudflare" ? "#fff" : "#fafafa",
+                transition: "all 0.3s ease",
+                boxShadow: aiProvider === "cloudflare" ? "0 0 8px rgba(233, 30, 99, 0.15)" : "none"
+            }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#444" }}>Cloudflare Workers AI</h3>
+                        {testResults["cloudflare"]?.result && <span style={{ color: "#f6821f", fontSize: "0.8rem", fontWeight: "bold" }}>● Connected</span>}
+                        {testResults["cloudflare"]?.error && <span style={{ color: "#ff4d4f", fontSize: "0.8rem", fontWeight: "bold" }}>● Error</span>}
+                    </div>
+                    {aiProvider === "cloudflare" ? <ActiveBadge /> : <UseButton onClick={() => setAiProvider("cloudflare")} />}
+                </div>
+
+                <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem", color: "#666" }}>アカウントID</label>
+                    <input
+                        type="text"
+                        value={cfAccountInput}
+                        onChange={(e) => setCfAccountInput(e.target.value)}
+                        placeholder="ダッシュボードのアカウントID"
+                        style={{ width: "100%", padding: "10px", boxSizing: "border-box", borderRadius: "6px", border: "1px solid #ccc", outline: "none" }}
+                    />
+                </div>
+
+                <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem", color: "#666" }}>APIトークン</label>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                            type="password"
+                            value={cfTokenInput}
+                            onChange={(e) => setCfTokenInput(e.target.value)}
+                            placeholder="Workers AI 権限のトークン"
+                            style={{ flex: 1, padding: "10px", boxSizing: "border-box", borderRadius: "6px", border: "1px solid #ccc", outline: "none" }}
+                        />
+                        <button
+                            onClick={saveCloudflareCreds}
+                            style={{ padding: "10px 16px", backgroundColor: "#f6821f", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", whiteSpace: "nowrap" }}
+                        >
+                            保存
+                        </button>
+                    </div>
+                    {saveStatus["cloudflare"]?.error && (
+                        <div style={{ marginTop: "8px", padding: "8px 10px", backgroundColor: "#fff2f0", border: "1px solid #ffccc7", borderRadius: "4px", color: "#ff4d4f", fontSize: "0.85rem" }}>
+                            ⚠️ {saveStatus["cloudflare"].error}
+                        </div>
+                    )}
+                    {saveStatus["cloudflare"]?.success && (
+                        <div style={{ marginTop: "8px", padding: "8px 10px", backgroundColor: "#fff7e6", border: "1px solid #ffd591", borderRadius: "4px", color: "#f6821f", fontSize: "0.85rem" }}>
+                            ✨ 保存しました
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ marginBottom: "15px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+                        <label style={{ fontSize: "0.9rem", color: "#666" }}>モデル</label>
+                        <button
+                            onClick={refreshCloudflareModels}
+                            disabled={saveStatus["cloudflare"]?.loading}
+                            style={{
+                                padding: "4px 12px", fontSize: "0.8rem",
+                                backgroundColor: "transparent", color: "#f6821f",
+                                border: "1px solid #f6821f", borderRadius: "4px",
+                                cursor: saveStatus["cloudflare"]?.loading ? "not-allowed" : "pointer",
+                                opacity: saveStatus["cloudflare"]?.loading ? 0.5 : 1,
+                            }}
+                        >
+                            {saveStatus["cloudflare"]?.loading ? "取得中..." : "モデル一覧を更新"}
+                        </button>
+                    </div>
+                    <select
+                        value={cloudflareModel}
+                        onChange={(e) => setCloudflareModel(e.target.value)}
+                        style={{ width: "100%", padding: "10px", boxSizing: "border-box", borderRadius: "6px", border: "1px solid #ccc", backgroundColor: "#fff" }}
+                    >
+                        {cloudflareModels.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <div style={{ fontSize: "0.75rem", color: "#999", marginTop: "4px" }}>
+                        既定は動作確認済みの数件のみです。「モデル一覧を更新」で実際に使えるモデルを取得できます。
+                    </div>
+                </div>
+
+                <div>
+                    <button
+                        onClick={() => onRunApiTest("cloudflare")}
+                        disabled={testResults["cloudflare"]?.loading}
+                        style={{
+                            width: "100%", padding: "10px",
+                            backgroundColor: testResults["cloudflare"]?.loading ? "#ccc" : "#f6821f",
+                            color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem", fontWeight: "bold"
+                        }}
+                    >
+                        {testResults["cloudflare"]?.loading ? "テスト通信中..." : "接続をテストする"}
+                    </button>
+                    {testResults["cloudflare"]?.error && (
+                        <div style={{ marginTop: "12px", padding: "10px", backgroundColor: "#fff2f0", border: "1px solid #ffccc7", borderRadius: "4px", color: "#ff4d4f", fontSize: "0.85rem", lineHeight: "1.4" }}>
+                            <strong>⚠️ 使用不可:</strong> Cloudflareに接続できません。アカウントIDとトークンを確認してください。
+                            <div style={{ fontSize: "0.75rem", marginTop: "4px", opacity: 0.8 }}>({testResults["cloudflare"].error})</div>
+                        </div>
+                    )}
+                    {testResults["cloudflare"]?.result && (
+                        <div style={{ marginTop: "12px", padding: "10px", backgroundColor: "#fff7e6", border: "1px solid #ffd591", borderRadius: "4px", color: "#f6821f", fontSize: "0.85rem" }}>
+                            ✨ 正常にレスポンスを受信しました: "{testResults["cloudflare"].result.slice(0, 30)}..."
                         </div>
                     )}
                 </div>
