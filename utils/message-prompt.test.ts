@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { applyReplacementRules, buildMessagePrompt } from "./message-prompt"
+import {
+    ANALYSIS_SECTION_HEADING,
+    ANALYSIS_SECTION_NOTE,
+    applyReplacementRules,
+    buildMessagePrompt
+} from "./message-prompt"
 
 const TEMPLATE = `テンプレ本文
 
@@ -48,6 +53,19 @@ describe("buildMessagePrompt: 分析セクションの挿入", () => {
     const out = buildMessagePrompt({ ...base, demandSupplyHint: "噛み合いメモ" })
     expect(out).toContain("噛み合いメモ")
     expect(out.indexOf("噛み合いメモ")).toBeLessThan(out.indexOf("# 相手のプロフィール"))
+  })
+
+  // オープンモデルは突き合わせ結果をそのまま言い直したメッセージを書く（実測）
+  it("突き合わせ結果を本文に写さない旨の注意を見出しの直後に入れる", () => {
+    const out = buildMessagePrompt({ ...base, demandSupplyHint: "噛み合いメモ" })
+    expect(out).toContain(ANALYSIS_SECTION_NOTE)
+    const noteAt = out.indexOf(ANALYSIS_SECTION_NOTE)
+    expect(noteAt).toBeGreaterThan(out.indexOf(ANALYSIS_SECTION_HEADING))
+    expect(noteAt).toBeLessThan(out.indexOf("噛み合いメモ"))
+  })
+
+  it("突き合わせが無いときは注意も出さない", () => {
+    expect(buildMessagePrompt({ ...base })).not.toContain(ANALYSIS_SECTION_NOTE)
   })
 
   it("優先話題は分析セクションの先頭に置く", () => {

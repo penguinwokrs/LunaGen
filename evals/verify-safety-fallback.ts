@@ -110,6 +110,9 @@ async function runCase(payload: any, fallbackProvider: string) {
             blocked: /PROHIBITED_CONTENT|安全フィルタ/.test(String(res?.error ?? "")),
             error: res?.error ? String(res.error).slice(0, 60) : null,
             length: res?.text ? res.text.length : 0,
+            // 文字数だけ見ていたせいで「本文ではなく解析文が返っている」のを
+            // 見落とした（2026-08-03）。生成物は必ず目で見て確認すること。
+            text: res?.text ?? null,
             fallbackUsed: res?.fallbackUsed ?? null,
             fbLogs: logs.filter((t) => /Fallback|Falling back/i.test(t)).slice(0, 2).map((t) => t.slice(0, 90))
         }
@@ -163,6 +166,7 @@ for (let i = 1; i <= ATTEMPTS; i++) {
     const r = await runCase(payload, "cloudflare")
     if (r.fallbackUsed) fellBack++
     console.log(`  ${i}回目: ${r.ok ? `生成OK (${r.length}字)` : `エラー: ${r.error}`} / fallbackUsed=${r.fallbackUsed ?? "なし"}`)
+    if (r.text) console.log(`      本文: ${r.text.replace(/\n/g, " ⏎ ")}`)
     r.fbLogs.forEach((l: string) => console.log(`      ${l}`))
 }
 console.log(`  → ${fellBack}/${ATTEMPTS} 回フォールバック\n`)

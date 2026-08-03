@@ -12,6 +12,21 @@ import { injectToneBlock } from "./tone"
 /** 分析セクションの見出し */
 export const ANALYSIS_SECTION_HEADING = "# プロフィール項目の突き合わせ"
 
+/**
+ * 分析セクションの扱い方。見出しの直後に置く。
+ *
+ * 2026-08-03 の実測（evals/diagnose-fallback-output.ts）で、Cloudflare 側の
+ * オープンモデルはこのセクションを**そのまま言い直した**メッセージを書いた。
+ * 例:「言葉でのやり取りを大事にしたいと思っているので、ゆっくり文章のやり取りを
+ * 重ねられたら嬉しいです」——これは突き合わせ結果の読み上げであって、
+ * 相手のプロフィールを読んだ証拠にならない。Gemini は抽象化するが、
+ * 能力の低いモデルほど与えた分析を出力に写す。
+ */
+export const ANALYSIS_SECTION_NOTE = `※以下は相手を理解するための判断材料であり、メッセージに書き写す材料ではありません。
+- ここに書かれた文言をそのまま、あるいは言い換えて本文に載せないこと
+- 「噛み合っている」「条件が合っている」という事実自体を伝えないこと。自分の希望条件を述べる文（「〜を大事にしたいと思っているので」「〜を求めているので」等）もこれに当たる
+- 使ってよいのは、この突き合わせで見つけた「どこに触れるか」という当たりだけ。本文に書く言葉は相手のプロフィール本文から取ること`
+
 /** 分析セクションを差し込む位置のマーカー */
 export const TARGET_PROFILE_MARKER = "# 相手のプロフィール"
 
@@ -61,7 +76,7 @@ export function buildMessagePrompt({
 
   // 1. プロフィール項目の突き合わせ
   if (demandSupplyHint) {
-    analysisSections.push(`${ANALYSIS_SECTION_HEADING}\n${demandSupplyHint}`)
+    analysisSections.push(`${ANALYSIS_SECTION_HEADING}\n${ANALYSIS_SECTION_NOTE}\n\n${demandSupplyHint}`)
   }
 
   // 2. 相手が自由記述した求める条件（補足。初回メッセージのみ）
