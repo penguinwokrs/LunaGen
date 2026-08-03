@@ -165,14 +165,17 @@ export const cloudflareBaseURL = (accountId: string) =>
  * @cf/openai/gpt-oss-120b は応答が空だった。
  * 推測でIDを足さないこと（存在しないIDを既定にすると初回利用で必ず失敗する）。
  */
+// 思考しないモデルを先頭に置く。glm/qwen3 は思考型で、143字のメッセージ1本に
+// completion 11,937トークン（約449 Neurons）を使い、応答も数分かかることを実測した。
+// 無料枠 10,000 Neurons/日 だと1日22回しか回らない。詳細は utils/cloudflare-model.ts。
 export const CLOUDFLARE_MODELS = [
-    "@cf/zai-org/glm-4.7-flash",
     "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    "@cf/qwen/qwen3-30b-a3b-fp8",
     "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "@cf/zai-org/glm-4.7-flash",
+    "@cf/qwen/qwen3-30b-a3b-fp8",
 ];
 
-export const CLOUDFLARE_DEFAULT_MODEL = "@cf/zai-org/glm-4.7-flash";
+export const CLOUDFLARE_DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 export const OLLAMA_DEFAULT_HOST = "localhost";
 export const OLLAMA_DEFAULT_PORT = "11434";

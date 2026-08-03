@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react"
 import { GEMINI_MODELS, OPENAI_MODELS, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, CLOUDFLARE_MODELS } from "../../constants"
+import { isReasoningModel } from "../../utils/cloudflare-model"
 
 interface ApiConfigSectionProps {
     aiProvider: string
@@ -683,6 +684,12 @@ export const ApiConfigSection = ({
                     <div style={{ fontSize: "0.75rem", color: "#999", marginTop: "4px" }}>
                         既定は動作確認済みの数件のみです。「モデル一覧を更新」で実際に使えるモデルを取得できます。
                     </div>
+                    {isReasoningModel(cloudflareModel) && (
+                        <div style={{ fontSize: "0.75rem", color: "#f6821f", marginTop: "6px", lineHeight: 1.6 }}>
+                            ⚠️ これは思考型モデルです。実測で1回の生成に約450 Neurons（無料枠10,000/日 = 1日22回）を消費し、
+                            応答に数分かかります。空文字が返ることもあります。特に理由が無ければ llama や mistral を選んでください。
+                        </div>
+                    )}
                 </div>
 
                 <div>

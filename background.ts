@@ -9,6 +9,7 @@ import { applyReplacementRules, buildMessagePrompt } from "./utils/message-promp
 import { addLog } from "./utils/logger"
 import { migratePrompt } from "./utils/prompt-migration"
 import { decideFallback } from "./utils/fallback"
+import { cloudflareMaxOutputTokens } from "./utils/cloudflare-model"
 import { resolveToneInstruction, type TonePreset } from "./utils/tone"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -117,7 +118,7 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
  */
 async function generateWithConfiguredProvider(
   prompt: string,
-  opts: { openaiMaxTokens?: number } = {}
+  opts: GenerateOpts = {}
 ): Promise<{ text: string; fallbackUsed?: string }> {
   const aiProvider = await storage.get("aiProvider") || "gemini"
   try {
@@ -135,11 +136,17 @@ async function generateWithConfiguredProvider(
   }
 }
 
+/** 生成時のオプション。outputCharLimit は本文の文字数上限（初回200 / プレミアム500 / プロフィール400） */
+interface GenerateOpts {
+  openaiMaxTokens?: number
+  outputCharLimit?: number
+}
+
 /** プロバイダー名を受けて実際に生成する */
 async function runProvider(
   aiProvider: string,
   prompt: string,
-  opts: { openaiMaxTokens?: number } = {}
+  opts: GenerateOpts = {}
 ) {
   switch (aiProvider) {
     case "ollama": {
@@ -157,9 +164,14 @@ async function runProvider(
       return await generateWithOpenAI(prompt, model, opts.openaiMaxTokens ?? 500)
     }
     case "cloudflare": {
-      const model = await storage.get("cloudflareModel") || CLOUDFLARE_DEFAULT_MODEL
+      const model = await storage.get<string>("cloudflareModel") || CLOUDFLARE_DEFAULT_MODEL
       const accountId = await storage.get<string>("cloudflareAccountId")
-      return await generateWithCloudflare(prompt, model, accountId || "")
+      return await generateWithCloudflare(
+        prompt,
+        model,
+        accountId || "",
+        cloudflareMaxOutputTokens(model, opts.outputCharLimit ?? 200)
+      )
     }
     default:
       throw new Error(`Unknown AI provider: ${aiProvider}`)
@@ -250,7 +262,10 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
   await logBG("info", `Using AI Provider: ${aiProvider}`, { isPremium: !!isPremium, hasHistory: !!chatHistory })
 
   const generateOnce = (p: string) =>
-    generateWithConfiguredProvider(p, { openaiMaxTokens: isPremium ? 2000 : 500 })
+    generateWithConfiguredProvider(p, {
+      openaiMaxTokens: isPremium ? 2000 : 500,
+      outputCharLimit: isPremium ? 500 : 200
+    })
 
   try {
     let result = await generateOnce(prompt)
@@ -324,7 +339,7 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
 
   const CAP = 400
   const candidates: string[] = []
-  const first = await generateWithConfiguredProvider(prompt, { openaiMaxTokens: 1000 })
+  const first = await generateWithConfiguredProvider(prompt, { openaiMaxTokens: 1000, outputCharLimit: CAP })
   candidates.push(first.text)
 
   // 400字超過時の短縮リトライ（最大2回）
@@ -334,7 +349,7 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
     const len = candidates[candidates.length - 1].length
     const retryPrompt = `${prompt}\n\n【再生成指示】前回の出力は${len}文字で上限400を超えています。優先度の低い内容（推奨事項に相当する部分）から削り、330〜380字を目安に書き直してください（400字を1文字でも超えたら失格）。`
     await logBG("info", `Profile retry ${attempt}: ${len} chars > ${CAP}`)
-    const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
+    const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000, outputCharLimit: CAP })
     candidates.push(next.text)
   }
 
@@ -349,7 +364,7 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
     if (!check.ok) {
       await logBG("warn", "Kink preservation failed; retrying", { missingCount: check.missing.length })
       const retryPrompt = `${prompt}\n\n【再生成指示】元の文にある嗜好（${check.missing.join("、")}）が出力から欠落しています。これらを（穏当な言い換えでもよいので）保持したまま書き直してください。400字以内厳守。`
-      const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000 })
+      const next = await generateWithConfiguredProvider(retryPrompt, { openaiMaxTokens: 1000, outputCharLimit: CAP })
       const recheck = checkKinkPreservation(currentText || "", next.text, rules, preservationMode)
       if (recheck.ok && next.text.length <= CAP) {
         text = next.text
@@ -474,18 +489,38 @@ async function generateWithOpenAI(prompt: string, model: string, maxOutputTokens
   // Chat Completions しか受け付けないため、.chat() を明示して形式を固定する。
   // 2026-08-03 実測: 明示しないと Cloudflare が
   // "required properties at '/' are 'messages'" で 400 を返す。
-async function generateWithCloudflare(prompt: string, model: string, accountId: string) {
+async function generateWithCloudflare(
+  prompt: string,
+  model: string,
+  accountId: string,
+  maxOutputTokens: number
+) {
   const apiKey = await syncStorage.get("cloudflareApiToken")
   if (!apiKey) throw new Error("Cloudflare API Token is not set")
   if (!accountId) throw new Error("Cloudflare Account ID is not set")
 
   const cf = createOpenAI({ baseURL: cloudflareBaseURL(accountId), apiKey })
-  const { text, finishReason } = await generateText({ model: cf.chat(model), prompt })
-  if (!text) {
-    await logBG("error", "Cloudflare generated empty text", { finishReason })
-    throw new Error(`Cloudflare generated no text. (FinishReason: ${finishReason})`)
+
+  // 空文字が返ることがある。glm-4.7-flash の実測で3回に1回ほど、
+  // finishReason=stop のまま本文だけ空で返ってきた。フォールバック先が
+  // これで失敗すると打つ手が無くなるので、1回だけ引き直す。
+  const MAX_ATTEMPTS = 2
+  let lastFinishReason: string | undefined
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { text, finishReason } = await generateText({
+      model: cf.chat(model),
+      prompt,
+      maxOutputTokens
+    })
+    if (text) return { text }
+    lastFinishReason = finishReason
+    await logBG(
+      attempt < MAX_ATTEMPTS ? "warn" : "error",
+      `Cloudflare generated empty text (${attempt}/${MAX_ATTEMPTS})`,
+      { finishReason, model, maxOutputTokens }
+    )
   }
-  return { text }
+  throw new Error(`Cloudflare generated no text. (FinishReason: ${lastFinishReason})`)
 }
 
 async function generateWithOllama(prompt: string, model: string, baseURL: string) {
