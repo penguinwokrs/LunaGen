@@ -277,6 +277,14 @@ async function handleGenerateMessage({ myProfile, targetProfile, targetName, cha
       await logBG("info", `Premium final length: ${result.text.length} chars`)
     }
 
+    // 採用した生成文そのものを残す。プロンプトだけでは「この相手に何を送ったか」を
+    // 後から追えず、生成品質の振り返りができない。リトライした場合も、
+    // ここに出るのは最終的に採用された1本だけ。
+    await logBG("info", `Generated message (${result.text.length} chars)`, {
+      text: result.text,
+      fallbackUsed: result.fallbackUsed
+    })
+
     return result
   } catch (e: any) {
     // Log prompt on error - append to message to ensure it's saved/displayed
@@ -358,7 +366,7 @@ async function handleGenerateProfile({ fieldType, taste, currentText, myProfileR
       ? "400字に収まりませんでした。採用後に手動で調整してください。"
       : kinkWarning
 
-  await logBG("info", `Profile generated: ${fieldType}/${taste} ${text.length} chars`)
+  await logBG("info", `Profile generated: ${fieldType}/${taste} ${text.length} chars`, { text, warning })
   return { text, warning }
 }
 

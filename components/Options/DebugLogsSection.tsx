@@ -95,10 +95,25 @@ export const DebugLogsSection = ({
                             debugLogs.map((log: any, i: number) => (
                                 <div key={i} style={{
                                     marginBottom: "4px",
+                                    paddingBottom: "4px",
                                     borderBottom: "1px solid #f0f0f0",
+                                    // プロンプトなど長い行が横にはみ出さないようにする
+                                    whiteSpace: "pre-wrap",
+                                    overflowWrap: "anywhere",
                                     color: log.level === "error" ? "red" : log.level === "warn" ? "orange" : "#333"
                                 }}>
                                     <span style={{ color: "#888" }}>[{log.timestamp}]</span> [{log.level.toUpperCase()}] {log.message}
+                                    {log.detail !== undefined && log.detail !== null && log.detail !== "" && (
+                                        // 生成されたメッセージ本文はここに入る（detail.text）
+                                        <div style={{
+                                            marginTop: "2px",
+                                            paddingLeft: "8px",
+                                            borderLeft: "2px solid #ddd",
+                                            color: "#666"
+                                        }}>
+                                            {typeof log.detail === "string" ? log.detail : JSON.stringify(log.detail)}
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         ) : (
