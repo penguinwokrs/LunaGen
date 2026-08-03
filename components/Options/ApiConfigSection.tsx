@@ -33,6 +33,8 @@ interface ApiConfigSectionProps {
     setCloudflareModel: (val: string) => void
     cloudflareModelList: string[]
     setCloudflareModelList: (val: string[]) => void
+    fallbackProvider: string
+    setFallbackProvider: (val: string) => void
     onRunApiTest: (provider: "gemini" | "openai" | "ollama" | "cloudflare", apiKey?: string) => void
 }
 
@@ -160,6 +162,8 @@ export const ApiConfigSection = ({
     setCloudflareModel,
     cloudflareModelList,
     setCloudflareModelList,
+    fallbackProvider,
+    setFallbackProvider,
     testResults,
     onRunApiTest
 }: ApiConfigSectionProps) => {
@@ -705,6 +709,32 @@ export const ApiConfigSection = ({
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* 安全ブロック時のフォールバック */}
+            <div style={{
+                marginTop: "8px", padding: "15px",
+                border: "1px dashed #ccc", borderRadius: "8px", backgroundColor: "#fafafa"
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <label style={{ fontSize: "0.9rem", color: "#444", fontWeight: "bold" }}>
+                        ブロックされたときの切り替え先
+                    </label>
+                    <select
+                        value={fallbackProvider}
+                        onChange={(e) => setFallbackProvider(e.target.value)}
+                        style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", backgroundColor: "#fff", minWidth: "220px" }}
+                    >
+                        <option value="none">切り替えない</option>
+                        <option value="cloudflare">Cloudflare Workers AI</option>
+                        <option value="ollama">Ollama（ローカル）</option>
+                    </select>
+                </div>
+                <p style={{ fontSize: "0.8rem", color: "#666", margin: "8px 0 0", lineHeight: 1.6 }}>
+                    Gemini は BLOCK_NONE を指定しても、設定で無効化できない安全フィルタで生成を拒むことがあります。
+                    その場合だけ、ここで選んだプロバイダーで生成し直します。通信エラーや上限超過では切り替えません。<br />
+                    切り替えて生成したときは、生成ボタンの下にその旨が表示されます。
+                </p>
             </div>
         </section>
     )

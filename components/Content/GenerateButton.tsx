@@ -23,6 +23,8 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
     // エラーは「有無」ではなく実際のメッセージを保持する。
     // 固定文言だと安全フィルタのブロックなのかキー不備なのか切り分けられない。
     const [error, setError] = useState<string | null>(null)
+    /** 安全ブロックで別プロバイダーに切り替えて生成したときの切り替え先 */
+    const [fallbackUsed, setFallbackUsed] = useState<string | null>(null)
 
     useEffect(() => {
         let timer: NodeJS.Timeout
@@ -41,6 +43,7 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
         e.stopPropagation()
         setLoading(true)
         setError(null)
+        setFallbackUsed(null)
 
         // メッセージ入力欄に書かれた内容を「優先して掘り下げたい話題」として拾う。
         // 生成結果で上書きされる前に読み取っておく。
@@ -169,9 +172,10 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                 await addLog("error", `AI Generation Error: ${response.error}`, { error: response.error }, "CONTENT")
                 setError(response.error)
             } else if (response && response.text) {
-                await addLog("info", "AI Generation Success", null, "CONTENT")
+                await addLog("info", "AI Generation Success", { fallbackUsed: response.fallbackUsed }, "CONTENT")
                 insertText(textarea, response.text)
                 setError(null)
+                setFallbackUsed(response.fallbackUsed ?? null)
             } else {
                 await addLog("error", "AI Generation Invalid Response", { response }, "CONTENT")
                 setError("AIから応答がありませんでした。設定画面のログをご確認ください。")
@@ -242,6 +246,14 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
                     クリア
                 </button>
             </div>
+            {fallbackUsed && !loading && !error && (
+                <p style={{
+                    color: "#f6821f", fontSize: "11px", margin: "4px 0 0 4px",
+                    fontWeight: "bold", maxWidth: "420px", lineHeight: 1.5
+                }}>
+                    ↪ 安全フィルタでブロックされたため {fallbackUsed} で生成しました
+                </p>
+            )}
             {error && !loading && (
                 <p
                     style={{

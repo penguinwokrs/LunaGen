@@ -160,14 +160,16 @@ export const cloudflareBaseURL = (accountId: string) =>
 
 /**
  * 既定のモデル候補。設定画面の「モデル一覧を更新」で実APIから取得して差し替えられる。
- * 2026-08-03 に実アカウントで一覧を取得し、いずれも実在すること、
- * glm-4.7-flash は実際に日本語生成が通ることを確認済み。
+ * 2026-08-03 に実アカウントで確認した、実際に日本語生成が通った4件のみを載せている。
+ * 除外したもの: @cf/moonshotai/kimi-k2.6 は Workers Free プランで利用不可、
+ * @cf/openai/gpt-oss-120b は応答が空だった。
  * 推測でIDを足さないこと（存在しないIDを既定にすると初回利用で必ず失敗する）。
  */
 export const CLOUDFLARE_MODELS = [
     "@cf/zai-org/glm-4.7-flash",
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "@cf/qwen/qwen3-30b-a3b-fp8",
-    "@cf/moonshotai/kimi-k2.6",
+    "@cf/mistralai/mistral-small-3.1-24b-instruct",
 ];
 
 export const CLOUDFLARE_DEFAULT_MODEL = "@cf/zai-org/glm-4.7-flash";

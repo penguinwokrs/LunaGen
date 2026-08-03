@@ -12,6 +12,7 @@ import { replacementRules as defaultReplacementRules } from "./assets/replacemen
 import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, DEFAULT_TONE_PRESETS, CLOUDFLARE_DEFAULT_MODEL } from "./constants"
 import { extractProfileFromJSON } from "./utils/profile"
 import { NO_TONE, type TonePreset } from "./utils/tone"
+import { NO_FALLBACK } from "./utils/fallback"
 
 const storage = new Storage({ area: "local" })
 const syncStorage = new Storage({ area: "sync" })
@@ -36,6 +37,9 @@ export default function Options() {
   const [cloudflareApiToken, setCloudflareApiToken] = useStorage({ key: "cloudflareApiToken", instance: syncStorage }, "")
   const [cloudflareModel, setCloudflareModel] = useStorage({ key: "cloudflareModel", instance: storage }, CLOUDFLARE_DEFAULT_MODEL)
   const [cloudflareModelList, setCloudflareModelList] = useStorage<string[]>({ key: "cloudflareModelList", instance: storage }, [])
+  // 安全ブロック時の切り替え先。既定は「切り替えない」。
+  // アップデートだけで勝手に別モデルの文が出ないようにする
+  const [fallbackProvider, setFallbackProvider] = useStorage<string>({ key: "fallbackProvider", instance: storage }, NO_FALLBACK)
   const [promptTemplate, setPromptTemplate] = useStorage({ key: "promptTemplate", instance: storage }, DEFAULT_PROMPT)
   const [continuousPromptTemplate, setContinuousPromptTemplate] = useStorage({ key: "continuousPromptTemplate", instance: storage }, CONTINUOUS_CONVERSATION_PROMPT)
   const [myProfile, setMyProfile] = useStorage({ key: "myProfile", instance: storage }, "")
@@ -225,6 +229,8 @@ export default function Options() {
         setCloudflareModel={setCloudflareModel}
         cloudflareModelList={cloudflareModelList}
         setCloudflareModelList={setCloudflareModelList}
+        fallbackProvider={fallbackProvider}
+        setFallbackProvider={setFallbackProvider}
         testResults={testResults}
         onRunApiTest={runApiTest}
       />

@@ -8,6 +8,7 @@ import { describeAiError } from "./utils/ai-error"
 import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
 import { addLog } from "./utils/logger"
 import { migratePrompt } from "./utils/prompt-migration"
+import { decideFallback } from "./utils/fallback"
 import { resolveToneInstruction, type TonePreset } from "./utils/tone"
 
 import { replacementRules as defaultReplacementRules } from "./assets/replacement_rules"
@@ -106,12 +107,40 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
   }
 }
 
-/** 設定済みプロバイダで1回生成する（メッセージ/プロフィール共用） */
+/**
+ * 設定済みプロバイダで1回生成する（メッセージ/プロフィール共用）。
+ *
+ * 安全フィルタでブロックされた場合だけ、設定されたフォールバック先へ切り替えて
+ * もう一度生成する。Gemini は BLOCK_NONE を指定しても、設定で無効化できない
+ * PROHIBITED_CONTENT で拒むことがある（実プロフィールで再現確認済み）。
+ * 通信エラーや課金上限では切り替えない。切り替えると本来直すべき問題が見えなくなる。
+ */
 async function generateWithConfiguredProvider(
   prompt: string,
   opts: { openaiMaxTokens?: number } = {}
-) {
+): Promise<{ text: string; fallbackUsed?: string }> {
   const aiProvider = await storage.get("aiProvider") || "gemini"
+  try {
+    return await runProvider(aiProvider as string, prompt, opts)
+  } catch (e: any) {
+    const fallback = await storage.get<string>("fallbackProvider")
+    const decision = decideFallback(!!e?.isSafetyBlock, fallback, aiProvider as string)
+    if (!decision.use || !decision.provider) {
+      await logBG("info", `Fallback not used: ${decision.reason}`)
+      throw e
+    }
+    await logBG("warn", `Safety block on ${aiProvider}. Falling back to ${decision.provider}`)
+    const res = await runProvider(decision.provider, prompt, opts)
+    return { ...res, fallbackUsed: decision.provider }
+  }
+}
+
+/** プロバイダー名を受けて実際に生成する */
+async function runProvider(
+  aiProvider: string,
+  prompt: string,
+  opts: { openaiMaxTokens?: number } = {}
+) {
   switch (aiProvider) {
     case "ollama": {
       const model = await storage.get("ollamaModel") || OLLAMA_DEFAULT_MODEL
@@ -394,7 +423,11 @@ async function generateWithGemini(prompt: string, model: string) {
         continue
       }
 
-      throw new Error(described.message)
+      const err: any = new Error(described.message)
+      // フォールバック判定のために安全ブロックかどうかを残す。
+      // ここで落とすと、呼び出し側は文言でしか判断できなくなる。
+      err.isSafetyBlock = described.isSafetyBlock
+      throw err
     }
   }
 
