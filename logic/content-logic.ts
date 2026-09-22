@@ -9,6 +9,12 @@ const storage = new Storage({ area: "local" })
  * テキストエリアに文字列を挿入し、各種イベントを発火させる
  */
 export function insertText(textarea: HTMLTextAreaElement, text: string) {
+    // maxlength 超えの値を入れると、ブラウザがそれ以降の入力を受け付けず編集できなくなる。
+    // 超える場合は属性を外し、元の上限はプレミアム判定用に退避しておく。
+    if (textarea.maxLength >= 0 && text.length > textarea.maxLength) {
+        textarea.dataset.lunagenMaxlength = String(textarea.maxLength)
+        textarea.removeAttribute("maxlength")
+    }
     textarea.value = text
     textarea.dispatchEvent(new Event("input", { bubbles: true }))
     textarea.dispatchEvent(new Event("change", { bubbles: true }))

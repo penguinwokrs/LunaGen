@@ -149,7 +149,8 @@ export const GenerateButton = ({ textarea }: GenerateButtonProps) => {
             // 生成対象の入力欄そのもので判定する。実測 maxlength は
             // プレミアム=500 / メッセージ付きいいね=200 / マッチ後スレッド=-1(属性なし)。
             const isPremium = isPremiumInput(
-                textarea.maxLength,
+                // insertText が maxlength を外していたら退避した元の値で判定する
+                Number(textarea.dataset.lunagenMaxlength ?? textarea.maxLength),
                 textarea.closest("[role=dialog]")?.textContent ?? ""
             )
             await addLog("info", `Requesting generation (Premium: ${isPremium})`, { hasHistory: !!chatHistory }, "CONTENT")
