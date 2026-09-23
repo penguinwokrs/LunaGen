@@ -45,6 +45,7 @@
     "vitest": "^4.0.17"
   },
   "manifest": {
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiW3Wz1bfkfywK4RlVDTmYLpnKPPT2pjQe4Yzk1rqtQVNZ2mBo63nB/FfYiEFnwWPyNn8H/BQlxWKQ/pDO7hugSdmOZCoES6GC6Po+RCo5qGlycKwtbqw//hlOE+AdM6xAbO5k7HGXTR5yYsgPSVTauPSyjQrJ//6L4e5AbRlO70bcUQuagP9Ewxb7HiyHgH12yMpw1beocUlowp59dlwfz1TcmsJsT/wL9exhudjOw1q3GbyZy2UQsmBUcdyFfcLkVYfdb/Uzuhlz08bILzBi1USZKRekbi9HInt503mv26yzHt0EPXM/1PiWKe5qPJMOy161l6dWlyCSfVvTYTuAQIDAQAB",
     "host_permissions": [
       "https://*/*"
     ],
