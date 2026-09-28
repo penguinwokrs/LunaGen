@@ -20,10 +20,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # pnpm は pnpm-lock.yaml の形式(lockfileVersion 9.0)に合わせて 10 にする。
+      # 2026-09-23 まで 8 のままで、ロックファイルが無視され ^範囲の最新が入り、
+      # @ai-sdk/gateway 3.0.198 が混入して v1.19.2 の service worker が起動時に落ちた
+      # （TypeError: (0 , S.z).number is not a function）。--frozen-lockfile で再発を止める。
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 8
+          version: 10
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -47,7 +51,7 @@ jobs:
           npm version ${{ steps.tag_version.outputs.new_version }} --no-git-tag-version
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       # リリースのゲート。ここが赤ならタグもリリースも作られない。
       # test.yml と同じ内容だが、PR経由せず main に直接 push された場合でも
