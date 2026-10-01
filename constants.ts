@@ -181,6 +181,10 @@ export const OLLAMA_DEFAULT_HOST = "localhost";
 export const OLLAMA_DEFAULT_PORT = "11434";
 export const OLLAMA_DEFAULT_MODEL = "jaahas/qwen3.5-uncensored:9b";
 
+// Claude Code（サブスク）経由の生成。ホスト名は native-host/install.sh と一致させる
+export const CLAUDE_CODE_NATIVE_HOST = "com.penguinwokrs.lunagen_claude";
+export const CLAUDE_CODE_DEFAULT_MODEL = "haiku";
+
 // ===== 移行用の旧プロンプト =====
 // utils/prompt-migration.ts が「ユーザーが編集していない」判定に使う。
 // 完全一致で比較するため、1文字も変更しないこと。新プロンプトを更新するときは

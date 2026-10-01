@@ -2,7 +2,7 @@ import { generateText } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { createOpenAI } from "@ai-sdk/openai"
 import { Storage } from "@plasmohq/storage"
-import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, CLOUDFLARE_DEFAULT_MODEL, cloudflareBaseURL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V2, DEFAULT_TONE_PRESETS } from "./constants"
+import { DEFAULT_PROMPT, CONTINUOUS_CONVERSATION_PROMPT, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, CLOUDFLARE_DEFAULT_MODEL, cloudflareBaseURL, LEGACY_CONTINUOUS_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V1, LEGACY_DEFAULT_PROMPT_V2, DEFAULT_TONE_PRESETS, CLAUDE_CODE_DEFAULT_MODEL, CLAUDE_CODE_NATIVE_HOST } from "./constants"
 import { buildProfilePrompt, checkKinkPreservation, enforceLength, resolveAudience } from "./utils/profile-field"
 import { describeAiError } from "./utils/ai-error"
 import { applyReplacementRules, buildMessagePrompt } from "./utils/message-prompt"
@@ -100,6 +100,10 @@ async function handleTestApi({ provider, apiKey, model, baseURL }: any) {
         })
         return { success: true, text: text || "" }
       }
+      case "claude-code": {
+        const { text } = await generateWithClaudeCode(testPrompt, model || CLAUDE_CODE_DEFAULT_MODEL)
+        return { success: true, text }
+      }
       default:
         throw new Error(`Unknown provider: ${provider}`)
     }
@@ -173,9 +177,27 @@ async function runProvider(
         cloudflareMaxOutputTokens(model, opts.outputCharLimit ?? 200)
       )
     }
+    case "claude-code": {
+      const model = await storage.get<string>("claudeCodeModel") || CLAUDE_CODE_DEFAULT_MODEL
+      return await generateWithClaudeCode(prompt, model)
+    }
     default:
       throw new Error(`Unknown AI provider: ${aiProvider}`)
   }
+}
+
+/**
+ * ローカルの Claude Code CLI（`claude -p`、サブスク認証）で生成する。
+ * Native Messaging ホスト native-host/ を事前に登録しておく必要がある。
+ * 実測で1回 10〜75秒かかる（大半は API 側の待ち）。
+ */
+async function generateWithClaudeCode(prompt: string, model: string): Promise<{ text: string }> {
+  const res: any = await chrome.runtime.sendNativeMessage(CLAUDE_CODE_NATIVE_HOST, { prompt, model })
+    .catch((e: any) => {
+      throw new Error(`Claude Code ホストに接続できません（native-host/install.sh で登録済みか確認）: ${e.message}`)
+    })
+  if (res?.error) throw new Error(`Claude Code: ${res.error}`)
+  return { text: res?.text || "" }
 }
 
 /** 上限 cap を超えない範囲で最も cap に近い候補を選ぶ。両方超過なら短い方を選ぶ。 */
