@@ -181,6 +181,18 @@ export const OLLAMA_DEFAULT_HOST = "localhost";
 export const OLLAMA_DEFAULT_PORT = "11434";
 export const OLLAMA_DEFAULT_MODEL = "jaahas/qwen3.5-uncensored:9b";
 
+// Claude Code（サブスク）経由の生成。ホスト名は native-host/install.sh と一致させる
+export const CLAUDE_CODE_NATIVE_HOST = "com.penguinwokrs.lunagen_claude";
+export const CLAUDE_CODE_DEFAULT_MODEL = "sonnet";
+// 2026-10-01 に claude -p（サブスク）で全件応答を確認済み。別名は CLI 側で最新版に解決される
+export const CLAUDE_CODE_MODELS = [
+  "haiku", "sonnet", "opus", "fable",
+  "claude-fable-5-1", "claude-fable-5",
+  "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5",
+  "claude-sonnet-5-5", "claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5",
+  "claude-haiku-4-5",
+];
+
 // ===== 移行用の旧プロンプト =====
 // utils/prompt-migration.ts が「ユーザーが編集していない」判定に使う。
 // 完全一致で比較するため、1文字も変更しないこと。新プロンプトを更新するときは

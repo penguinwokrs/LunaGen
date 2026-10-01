@@ -1,6 +1,57 @@
 import React, { useState, useEffect, useRef } from "react"
 import { GEMINI_MODELS, OPENAI_MODELS, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT, OLLAMA_DEFAULT_MODEL, CLOUDFLARE_MODELS } from "../../constants"
 import { isReasoningModel } from "../../utils/cloudflare-model"
+import { Storage } from "@plasmohq/storage"
+import { useStorage } from "@plasmohq/storage/hook"
+import { CLAUDE_CODE_DEFAULT_MODEL, CLAUDE_CODE_MODELS } from "../../constants"
+
+const storage = new Storage({ area: "local" })
+
+/** Claude Code（サブスク）経由の生成。実験機能なので設定とテストをこのカード内で完結させる */
+function ClaudeCodeCard({ active, onUse }: { active: boolean; onUse: () => void }) {
+    const [model, setModel] = useStorage({ key: "claudeCodeModel", instance: storage }, CLAUDE_CODE_DEFAULT_MODEL)
+    const [test, setTest] = useState<{ loading?: boolean; result?: string; error?: string }>({})
+    const runTest = async () => {
+        setTest({ loading: true })
+        const res: any = await chrome.runtime.sendMessage({ action: "test_api", provider: "claude-code", model })
+        setTest(res?.success ? { result: res.text } : { error: res?.error || "応答がありません" })
+    }
+    return (
+        <div style={{
+            marginBottom: "20px", padding: "20px", borderRadius: "12px", transition: "all 0.3s ease",
+            border: `2px solid ${active ? "#e91e63" : (test.error ? "#ff4d4f" : "#ddd")}`,
+            opacity: active ? 1 : 0.6,
+            backgroundColor: active ? "#fff" : "#fafafa",
+            boxShadow: active ? "0 0 8px rgba(233, 30, 99, 0.15)" : "none"
+        }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+                <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#444" }}>Claude Code（サブスク・実験的）</h3>
+                {active ? <ActiveBadge /> : <UseButton onClick={onUse} />}
+            </div>
+            <p style={{ fontSize: "0.8rem", color: "#666", margin: "0 0 12px", lineHeight: 1.6 }}>
+                ローカルの <code>claude -p</code> をサブスク認証のまま呼びます。事前に WSL で <code>bash native-host/install.sh</code> の実行が必要です。
+                1回の生成に10〜75秒かかります。
+            </p>
+            <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                style={{ width: "100%", padding: "10px", marginBottom: "12px", borderRadius: "6px", border: "1px solid #ccc", backgroundColor: "#fff" }}
+            >
+                {/* 別名（haiku 等）は CLI 側で最新版に解決される。値は CLI に渡す別名のまま、表示だけ -latest を付ける */}
+                {CLAUDE_CODE_MODELS.map(m => <option key={m} value={m}>{m.startsWith("claude-") ? m : `${m}-latest`}</option>)}
+            </select>
+            <button
+                onClick={runTest}
+                disabled={test.loading}
+                style={{ width: "100%", padding: "10px", backgroundColor: test.loading ? "#ccc" : "#d97757", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "0.9rem", fontWeight: "bold" }}
+            >
+                {test.loading ? "テスト通信中..." : "接続をテストする"}
+            </button>
+            {test.error && <div style={{ marginTop: "12px", padding: "10px", backgroundColor: "#fff2f0", border: "1px solid #ffccc7", borderRadius: "4px", color: "#ff4d4f", fontSize: "0.85rem" }}>⚠️ {test.error}</div>}
+            {test.result && <div style={{ marginTop: "12px", padding: "10px", backgroundColor: "#fff7e6", border: "1px solid #ffd591", borderRadius: "4px", color: "#d97757", fontSize: "0.85rem" }}>✨ 正常にレスポンスを受信しました: "{test.result.slice(0, 30)}..."</div>}
+        </div>
+    )
+}
 
 interface ApiConfigSectionProps {
     aiProvider: string
@@ -717,6 +768,8 @@ export const ApiConfigSection = ({
                     )}
                 </div>
             </div>
+
+            <ClaudeCodeCard active={aiProvider === "claude-code"} onUse={() => setAiProvider("claude-code")} />
 
             {/* 安全ブロック時のフォールバック */}
             <div style={{

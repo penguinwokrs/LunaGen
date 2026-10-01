@@ -53,7 +53,8 @@
       "storage",
       "downloads",
       "tabs",
-      "scripting"
+      "scripting",
+      "nativeMessaging"
     ]
   }
 }

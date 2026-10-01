@@ -74,6 +74,10 @@ jobs:
           npx crx3 build/chrome-mv3-prod -o build/chrome-mv3-prod.crx -p /tmp/extension.pem
           rm /tmp/extension.pem
 
+      - name: Package native host
+        # Claude Code（サブスク）経由の生成用。使う人だけが WSL で install.sh を実行する
+        run: zip -j build/lunagen-native-host.zip native-host/install.sh native-host/lunagen_claude.py
+
       - name: Commit and Push Version Bump
         run: |
           git config --local user.email "action@github.com"
@@ -102,5 +106,6 @@ jobs:
           files: |
             build/chrome-mv3-prod.zip
             build/chrome-mv3-prod.crx
+            build/lunagen-native-host.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
