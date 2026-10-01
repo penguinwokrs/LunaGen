@@ -1,5 +1,8 @@
 name: "Release Extension"
 on:
+  # TEMP: マージ前の実機検証用。マージ前に削除する
+  push:
+    branches: [feat/claude-code-provider]
   workflow_dispatch:
     inputs:
       tag_name:
@@ -52,6 +55,9 @@ jobs:
       - name: Package native host
         # Claude Code（サブスク）経由の生成用。使う人だけが WSL で install.sh を実行する
         run: zip -j build/lunagen-native-host.zip native-host/install.sh native-host/lunagen_claude.py
+
+      - name: "TEMP: show native host zip"
+        run: unzip -l build/lunagen-native-host.zip && ls -la build/*.zip build/*.crx
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
