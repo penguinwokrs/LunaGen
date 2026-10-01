@@ -55,7 +55,7 @@ def generate(req):
     prompt = req.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         return {"error": "prompt が空です"}
-    model = req.get("model") or "haiku"
+    model = req.get("model") or "sonnet"
     try:
         # cwd を固定してプロジェクトの CLAUDE.md を拾わないようにする
         proc = subprocess.run(

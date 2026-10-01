@@ -3,7 +3,7 @@ import { GEMINI_MODELS, OPENAI_MODELS, OLLAMA_DEFAULT_HOST, OLLAMA_DEFAULT_PORT,
 import { isReasoningModel } from "../../utils/cloudflare-model"
 import { Storage } from "@plasmohq/storage"
 import { useStorage } from "@plasmohq/storage/hook"
-import { CLAUDE_CODE_DEFAULT_MODEL } from "../../constants"
+import { CLAUDE_CODE_DEFAULT_MODEL, CLAUDE_CODE_MODELS } from "../../constants"
 
 const storage = new Storage({ area: "local" })
 
@@ -37,7 +37,8 @@ function ClaudeCodeCard({ active, onUse }: { active: boolean; onUse: () => void 
                 onChange={(e) => setModel(e.target.value)}
                 style={{ width: "100%", padding: "10px", marginBottom: "12px", borderRadius: "6px", border: "1px solid #ccc", backgroundColor: "#fff" }}
             >
-                {["haiku", "sonnet", "opus"].map(m => <option key={m} value={m}>{m}</option>)}
+                {/* 別名（haiku 等）は CLI 側で最新版に解決される。値は CLI に渡す別名のまま、表示だけ -latest を付ける */}
+                {CLAUDE_CODE_MODELS.map(m => <option key={m} value={m}>{m.startsWith("claude-") ? m : `${m}-latest`}</option>)}
             </select>
             <button
                 onClick={runTest}
