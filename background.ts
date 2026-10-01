@@ -188,13 +188,14 @@ async function runProvider(
 
 /**
  * ローカルの Claude Code CLI（`claude -p`、サブスク認証）で生成する。
- * Native Messaging ホスト native-host/ を事前に登録しておく必要がある。
- * 実測で1回 10〜75秒かかる（大半は API 側の待ち）。
+ * Native Messaging ホスト（native-host/install.sh）を事前に登録しておく必要がある。
+ * 未登録・WSL や claude が無い場合もこの生成1回の失敗になるだけで、他のプロバイダには影響しない。
+ * 実測で sonnet 約10秒、haiku は1〜3分。
  */
 async function generateWithClaudeCode(prompt: string, model: string): Promise<{ text: string }> {
   const res: any = await chrome.runtime.sendNativeMessage(CLAUDE_CODE_NATIVE_HOST, { prompt, model })
     .catch((e: any) => {
-      throw new Error(`Claude Code ホストに接続できません（native-host/install.sh で登録済みか確認）: ${e.message}`)
+      throw new Error(`Claude Code ホストに接続できません。リリースの lunagen-native-host.zip を解凍し、WSL で install.sh を実行してください（${e.message}）`)
     })
   if (res?.error) throw new Error(`Claude Code: ${res.error}`)
   return { text: res?.text || "" }
